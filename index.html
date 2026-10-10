@@ -304,7 +304,7 @@ const $ = id => document.getElementById(id);
 const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true };
 let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
 let layout = null, geom = null, pages = [], spaces = [];   // spaces: { y: row of the joined note, pt: height }
-let mode = 'pdf', shots = null, removedLines = 0;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
+let mode = 'pdf', shots = null, removedLines = 0, removedTitle = false;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
 
 let downloads = null;
 (async () => { try { if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); } catch (e) {} })();
@@ -390,9 +390,10 @@ async function loadPdf(file, out) {
     }
     // pages that fit in one canvas are also checked for typed text the printer turned into shapes
     const typed = H <= CHUNK_H ? await typedMarginLines(page, vp, W, H, boxes) : [];
-    rendered.push({ n, page, vp, W, H, chunks, typed });
+    rendered.push({ n, page, vp, W, H, chunks, typed, boxes });
   }
   await removeRepeatedTyped(rendered);
+  if (rendered[0] && rendered[0].chunks.length === 1) await removeTitle(rendered[0]);
   for (const r of rendered) {
     r.chunks.forEach((c, i) => out.push(Object.assign(analyze(c, i === 0, i === r.chunks.length - 1), { src: `page ${r.n}` })));
   }
@@ -439,6 +440,51 @@ async function typedMarginLines(page, vp, W, H, boxes) {
   }
   c.width = c.height = 0;
   return lines.map(l => ({ ...l, mid: (l.y0 + (l.a + l.b) / 2) / H }));
+}
+
+// OneNote puts the page title, a thin line under it and the date and time at the top of
+// the first page, as typed text. That block is removed when it is typed text in the top
+// fifth of the first page, above the first handwriting, and no more than five lines (a printed
+// header above the title counts as one of them).
+async function removeTitle(r) {
+  const fills = await renderLayer(r.page, r.vp, r.W, r.H, true, r.boxes);
+  const under = await renderLayer(r.page, r.vp, r.W, r.H, false, r.boxes);
+  const fctx = fills.getContext('2d', { willReadFrequently: true }), uctx = under.getContext('2d', { willReadFrequently: true });
+  const limit = Math.round(r.H * 0.2), W = r.W;
+  const dark = (d, p) => 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2] < INK_LUM;
+  // first row of handwriting (anything that isn't a filled shape)
+  const ud = uctx.getImageData(0, 0, W, limit).data;
+  let first = limit;
+  for (let y = 0; y < limit && first === limit; y++) {
+    let c = 0;
+    for (let x = 0; x < W; x++) if (dark(ud, (y * W + x) * 4) && ++c > NOISE) { first = y; break; }
+  }
+  if (!first) { fills.width = fills.height = under.width = under.height = 0; return; }
+  const fd = fctx.getImageData(0, 0, W, first).data;
+  const mask = new Uint8Array(W * first);
+  let lines = 0, last = -10;
+  for (let y = 0; y < first; y++) {
+    let any = false;
+    for (let x = 0; x < W; x++) if (dark(fd, (y * W + x) * 4)) { mask[y * W + x] = 1; any = true; }
+    if (any) { if (y - last > 4) lines++; last = y; }
+  }
+  fills.width = fills.height = 0;
+  if (!lines || lines > 5) { under.width = under.height = 0; return; }
+  const mctx = r.chunks[0].getContext('2d', { willReadFrequently: true });
+  const md = mctx.getImageData(0, 0, W, first), ud2 = uctx.getImageData(0, 0, W, first).data;
+  for (let y = 0; y < first; y++) for (let x = 0; x < W; x++) {
+    let hit = false;   // the letter's pixel or one next to it (smoothed edges)
+    for (let dy = -1; dy <= 1 && !hit; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const yy = y + dy, xx = x + dx;
+      if (yy >= 0 && yy < first && xx >= 0 && xx < W && mask[yy * W + xx]) { hit = true; break; }
+    }
+    if (!hit) continue;
+    const p = (y * W + x) * 4;
+    md.data[p] = ud2[p]; md.data[p + 1] = ud2[p + 1]; md.data[p + 2] = ud2[p + 2]; md.data[p + 3] = 255;
+  }
+  mctx.putImageData(md, 0, 0);
+  under.width = under.height = 0;
+  removedTitle = true;
 }
 
 async function removeRepeatedTyped(rendered) {
@@ -568,7 +614,7 @@ async function loadFiles(list) {
   setMode(pdfs.length ? 'pdf' : 'shots');
   try {
     if (pdfs.length) {
-      const out = []; removedLines = 0;
+      const out = []; removedLines = 0; removedTitle = false;
       for (const f of pdfs) { await loadPdf(f, out); await new Promise(r => setTimeout(r)); }
       if (!out.some(s => !s.empty)) { status('No writing was found in that file. Is the page blank in the export?'); return; }
       shots = null; $('cropcard').hidden = true;
@@ -981,7 +1027,10 @@ function renderPreviews(keepPlace = true) {
   const cuts = pages.filter((p, i) => p.cut && i < n - 1).length;
   const paper = opts.paper === 'a4' ? 'A4' : 'Letter';
   const from = shots ? `${shots.canvases.length} ${shots.canvases.length === 1 ? 'screenshot' : 'screenshots'}` : `${src} source ${src === 1 ? 'page' : 'pages'}`;
-  const removed = !shots && !isSample && removedLines ? ` · ${removedLines} header/footer ${removedLines === 1 ? 'line' : 'lines'} removed` : '';
+  const parts = [];
+  if (removedTitle) parts.push('page title');
+  if (removedLines) parts.push(`${removedLines} header/footer ${removedLines === 1 ? 'line' : 'lines'}`);
+  const removed = !shots && !isSample && parts.length ? ` · ${parts.join(' and ')} removed` : '';
   $('summary').textContent = `${from} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}${removed}`;
   const clipped = [...new Set(segments.filter(s => s.clipped).map(s => s.src))];
   const note = $('note');
