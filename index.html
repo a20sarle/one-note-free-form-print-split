@@ -1,4 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Print handwritten OneNote notes on clean A4 pages: rejoins lines split between pages, keeps the full width and removes printed headers and footers.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='3' width='20' height='26' rx='2' fill='%23fff' stroke='%232443B0' stroke-width='2'/%3E%3Cpath d='M10 11h12M10 16h12M10 21h8' stroke='%232443B0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  /* the base styles Claude's artifact pages add around the app */
+  :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
 <title>Pagefit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap">
@@ -140,7 +153,8 @@ button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px sol
 kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: var(--fg); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <header>
     <h1>Pagefit <small>OneNote → A4</small></h1>
@@ -1264,3 +1278,5 @@ if (/Macintosh/.test(navigator.userAgent) && !('ontouchend' in document)) tabs[1
 buildSample();
 })();
 </script>
+</body>
+</html>
