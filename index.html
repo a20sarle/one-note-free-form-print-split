@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Pagefit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap">
@@ -37,6 +38,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--f-body); }
 .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 28px; }
 h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
@@ -73,6 +75,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); padding: 5px 9px; font-size: .82rem; border-radius: 6px; }
 .btn-ghost:hover:not(:disabled) { border-color: var(--accent); }
 button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { margin: -2px 0 0; font-size: .84rem; color: var(--muted); }
+.cropcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+@media (max-width: 700px) { .cropcard { grid-template-columns: minmax(0, 1fr); } }
+.croptext { display: grid; gap: 6px; min-width: 0; }
+.croptext h3 { font-size: 1rem; font-weight: 500; }
+.croptext p { margin: 0; font-size: .9rem; color: var(--muted); }
+.croptext .joins { font: .78rem var(--f-mono); }
+.cropstage { position: relative; display: inline-block; line-height: 0; overflow: hidden; border-radius: 4px; justify-self: center; max-width: 100%; }
+.cropstage canvas { display: block; max-width: 100%; max-height: 340px; width: auto; height: auto; }
+.cropbox { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(10, 14, 24, .5); }
+.cropbox i { position: absolute; width: 22px; height: 22px; background: var(--accent); border: 3px solid var(--surface); border-radius: 50%; touch-action: none; }
+.cropbox i[data-h="nw"] { left: -12px; top: -12px; cursor: nwse-resize; }
+.cropbox i[data-h="ne"] { right: -12px; top: -12px; cursor: nesw-resize; }
+.cropbox i[data-h="sw"] { left: -12px; bottom: -12px; cursor: nesw-resize; }
+.cropbox i[data-h="se"] { right: -12px; bottom: -12px; cursor: nwse-resize; }
 .status { font-size: .88rem; color: var(--muted); min-height: 1.3em; margin: -8px 0 0; }
 .privacy { font-size: .82rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; margin: 0; }
 
@@ -89,9 +106,10 @@ button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px sol
 .meta .num { font: 500 .78rem var(--f-mono); color: var(--muted); margin-right: auto; }
 .chip { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
-.chip.ok { color: var(--ok); padding-inline: 0; }
-.nudges { display: flex; gap: 6px; width: 100%; }
-.nudges .btn-ghost { flex: 1; }
+.seg-sm button { font-size: .82rem; padding: 5px 4px; }
+.note.warn { background: var(--warn-soft); border-color: transparent; color: var(--fg); }
+.note.warn b { color: var(--warn); }
+.note a { color: var(--accent); }
 
 .guide { display: grid; gap: 16px; }
 .guide > h2 { font-size: 1.35rem; }
@@ -99,8 +117,10 @@ button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px sol
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { font: 600 .95rem var(--f-body); background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 12px; cursor: pointer; white-space: nowrap; }
 .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
-.tabpanel { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 24px; }
+.tabpanel { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 24px; }
 @media (max-width: 760px) { .tabpanel { grid-template-columns: minmax(0,1fr); } }
+.how { display: grid; gap: 8px; align-content: start; }
+.how h3 { font-size: .95rem; font-weight: 700; }
 .tabpanel ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
 .tabpanel ol li::marker { font: 500 .85rem var(--f-mono); color: var(--accent); }
 .tip { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: .94rem; display: grid; gap: 6px; align-content: start; }
@@ -113,15 +133,23 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
 <div class="wrap">
   <header>
     <h1>Pagefit <small>OneNote → A4</small></h1>
-    <p>OneNote pages are an endless canvas. When you print or export them, handwriting gets sliced through the middle of a line or cut off at the edge. Pagefit takes the PDF (or screenshots), finds the blank space between your lines, and lays everything out on clean A4 sheets.</p>
+    <p>OneNote pages are an endless canvas. When you print or export them, handwriting gets sliced through the middle of a line or cut off at the edge. Pagefit takes the PDF or your screenshots, finds the blank space between your lines, and lays everything out on clean A4 sheets.</p>
   </header>
 
   <section class="app">
     <aside class="panel" aria-label="Settings">
+      <div class="field">
+        <div class="label">Your note as</div>
+        <div class="seg" id="mode">
+          <button type="button" data-v="pdf" aria-pressed="true">PDF</button>
+          <button type="button" data-v="shots" aria-pressed="false">Screenshots</button>
+        </div>
+        <p class="hint" id="modeHint">Quickest. Choose Screenshots if the page is wider than the export.</p>
+      </div>
       <label class="drop" id="drop">
-        <strong>Choose your OneNote PDF</strong>
-        <span>or drop it here · screenshots work too</span>
-        <input type="file" id="file" accept="application/pdf,image/*" multiple>
+        <strong id="dropTitle">Choose your OneNote PDF</strong>
+        <span id="dropHint">or drop it here</span>
+        <input type="file" id="file" accept="application/pdf" multiple>
       </label>
       <p class="status" id="status" role="status"></p>
 
@@ -160,53 +188,82 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
         <span class="summary" id="summary"></span>
       </div>
       <div class="note" id="note"></div>
+      <div class="cropcard" id="cropcard" hidden>
+        <div class="croptext">
+          <h3 id="cropTitle">Note area</h3>
+          <p id="cropHint"></p>
+          <p class="joins" id="cropJoins"></p>
+        </div>
+        <div class="cropstage" id="cropstage">
+          <canvas id="cropimg" role="img" aria-label="First screenshot with the note area marked"></canvas>
+          <div class="cropbox" id="cropbox"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+        </div>
+      </div>
       <div class="sheets" id="sheets"></div>
     </div>
   </section>
 
-  <section class="guide">
+  <section class="guide" id="guide">
     <h2>Getting your notes out of OneNote</h2>
-    <p>Pagefit can only rearrange what is in the file, so make sure nothing is cut off when you export. A small, complete export is better than a large one with missing edges: Pagefit enlarges it again.</p>
+    <p>Use a PDF when the page fits the export. If writing is cut off on the right, OneNote dropped it while making the PDF, so use screenshots instead: they show exactly what is on screen, at any width.</p>
     <div class="tabs" role="tablist">
       <button type="button" role="tab" id="t-ipad" aria-selected="true" aria-controls="p-ipad">iPad</button>
       <button type="button" role="tab" id="t-mac" aria-selected="false" aria-controls="p-mac">Mac</button>
       <button type="button" role="tab" id="t-web" aria-selected="false" aria-controls="p-web">OneNote on the web</button>
     </div>
     <div class="tabpanel" role="tabpanel" id="p-ipad" aria-labelledby="t-ipad">
-      <ol>
-        <li>Open the page in OneNote.</li>
-        <li>Tap <span class="path">Share</span> (or <span class="path">…</span>) and send a copy of the page as a PDF. Save it to Files.</li>
-        <li>Open Pagefit in Safari, tap <b>Choose your OneNote PDF</b> and pick the file.</li>
-        <li>Check the sheets, then tap <b>Download PDF</b> and print that file.</li>
-      </ol>
-      <div class="tip">
-        <h3>Writing missing on the right?</h3>
-        <p>Then OneNote cut it off during export. Zoom out in OneNote until the whole page fits on screen, take a screenshot (top button + volume up) and give Pagefit the screenshot instead. For a long page, take several screenshots that don't overlap; Pagefit joins them in file-name order.</p>
+      <div class="how">
+        <h3>Screenshots</h3>
+        <ol>
+          <li>Open the page and pinch to zoom out until the whole width of your writing is on screen.</li>
+          <li>Scroll to the top and take a screenshot: top button + volume up.</li>
+          <li>Scroll down a little less than a screen, so some writing is in both screenshots, and take the next one. Repeat to the end.</li>
+          <li>In Pagefit choose <b>Screenshots</b> and select them all at once in Photos.</li>
+        </ol>
+      </div>
+      <div class="how">
+        <h3>PDF</h3>
+        <ol>
+          <li>Tap <span class="path">Share</span> (or <span class="path">…</span>) and send a copy of the page as a PDF. Save it to Files.</li>
+          <li>In Pagefit choose <b>PDF</b> and pick the file.</li>
+        </ol>
       </div>
     </div>
     <div class="tabpanel" role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden>
-      <ol>
-        <li>Open the page in OneNote and choose <span class="path">File → Print</span>.</li>
-        <li>Click <span class="path">Show Details</span> and set <span class="path">Scale</span> to about 60% so the whole width fits. Pagefit enlarges it again.</li>
-        <li>Open the <span class="path">PDF</span> menu at the bottom and choose <span class="path">Save as PDF</span>.</li>
-        <li>Drop that PDF onto Pagefit, check the sheets and download.</li>
-      </ol>
-      <div class="tip">
-        <h3>Screenshots work too</h3>
-        <p>Press <kbd>⇧⌘4</kbd>, drag around the note, then paste it here with <kbd>⌘V</kbd>. Handy for a single page or a board drawing.</p>
+      <div class="how">
+        <h3>Screenshots</h3>
+        <ol>
+          <li>Zoom out in OneNote (<kbd>⌘−</kbd>) until the full width fits in the window.</li>
+          <li>Press <kbd>⇧⌘3</kbd> for the whole screen, scroll down a little less than a screen, and repeat to the end.</li>
+          <li>In Pagefit choose <b>Screenshots</b> and select them all. A single screenshot can also be pasted with <kbd>⌘V</kbd>.</li>
+        </ol>
+      </div>
+      <div class="how">
+        <h3>PDF</h3>
+        <ol>
+          <li>Choose <span class="path">File → Print</span>, click <span class="path">Show Details</span> and set <span class="path">Scale</span> to about 60%.</li>
+          <li>Open the <span class="path">PDF</span> menu and choose <span class="path">Save as PDF</span>, then give it to Pagefit.</li>
+        </ol>
       </div>
     </div>
     <div class="tabpanel" role="tabpanel" id="p-web" aria-labelledby="t-web" hidden>
-      <ol>
-        <li>Open the notebook at onenote.com in Safari, Chrome or Edge.</li>
-        <li>Open the page and choose <span class="path">Print</span> from OneNote's menu.</li>
-        <li>Pick <span class="path">Save as PDF</span> as the printer and reduce the scale if the right edge is cut.</li>
-        <li>Give the PDF to Pagefit.</li>
-      </ol>
-      <div class="tip">
-        <h3>Why the cuts happen</h3>
-        <p>OneNote slices the canvas at fixed heights without looking at what is there. Pagefit measures every row of pixels and moves each page break into a gap between lines. If a break still lands on writing, the sheet is flagged and you can move the break with <b>Earlier</b> or <b>Later</b>.</p>
+      <div class="how">
+        <h3>Screenshots</h3>
+        <ol>
+          <li>Open the page at onenote.com and zoom the browser out until the full width fits.</li>
+          <li>Take overlapping screenshots from top to bottom and give them to Pagefit.</li>
+        </ol>
       </div>
+      <div class="how">
+        <h3>PDF</h3>
+        <ol>
+          <li>Choose <span class="path">Print</span> from OneNote's menu, pick <span class="path">Save as PDF</span> and lower the scale if the right edge is cut.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="tip">
+      <h3>How Pagefit places page breaks</h3>
+      <p>Pagefit measures every row of pixels and puts each page break in a gap between lines. Under each sheet you choose the break at its bottom: <b>Small break</b> cuts at the gap nearest the bottom, <b>Medium break</b> waits for a bigger gap so a whole section moves to the next sheet. With screenshots, Pagefit also finds where they overlap and removes OneNote's toolbar.</p>
     </div>
   </section>
 </div>
@@ -228,7 +285,8 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.clo
 const $ = id => document.getElementById(id);
 const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true, nums: true };
 let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
-let layout = null, geom = null, pages = [], manualEnds = [];
+let layout = null, geom = null, pages = [], breakKinds = [];
+let mode = 'pdf', shots = null;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
 
 let downloads = null;
 (async () => { try { if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); } catch (e) {} })();
@@ -263,7 +321,29 @@ function analyze(canvas, trimTop = true, trimBottom = true) {
     bottom = y;
   }
   for (let x = 0; x < w; x++) if (!ruledCol[x] && colCnt[x] > NOISE) { if (x < left) left = x; right = x; }
-  return { canvas, w, h, mask, ruledRow, ruledCol, top, bottom, left, right, trimTop, trimBottom, empty: top < 0 };
+  return { canvas, w, h, mask, ruledRow, ruledCol, top, bottom, left, right, trimTop, trimBottom, empty: top < 0,
+    clipped: right > 0.6 * w && hardRightEdge(mask, w, h, ruledRow, ruledCol, right) };
+}
+
+// OneNote crops wide pages with a straight vertical cut. Handwriting that ends naturally
+// stops at ragged places; cropped handwriting stops at the same column on line after line.
+// A drawn box or table edge also ends at one column, but as a single unbroken run of rows,
+// so we count separate runs of rows: of the lines that reach the right-hand strip of the
+// page, a good share must touch the very edge, on at least four separate lines.
+function hardRightEdge(mask, w, h, ruledRow, ruledCol, right) {
+  const band = Math.max(0, right - Math.round(0.08 * w));
+  let edgeRuns = 0, bandRuns = 0, inEdge = false, inBand = false;
+  for (let y = 0; y < h; y++) {
+    let edge = false, any = false;
+    if (!ruledRow[y]) {
+      const o = y * w;
+      for (let x = right; x >= band; x--) if (mask[o + x] && !ruledCol[x]) { any = true; if (x >= right - 1) edge = true; break; }
+    }
+    if (edge && !inEdge) edgeRuns++;
+    if (any && !inBand) bandRuns++;
+    inEdge = edge; inBand = any;
+  }
+  return edgeRuns >= 4 && edgeRuns >= 0.4 * bandRuns;
 }
 
 async function loadPdf(file, out) {
@@ -279,47 +359,245 @@ async function loadPdf(file, out) {
       c.width = W; c.height = Math.min(CHUNK_H, H - off);
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, 0, -off] }).promise;
-      out.push(analyze(c, off === 0, off + CHUNK_H >= H));
+      // 'print' intent renders without waiting for animation frames, so it keeps going in a background tab
+      await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, 0, -off], intent: 'print' }).promise;
+      out.push(Object.assign(analyze(c, off === 0, off + CHUNK_H >= H), { src: `page ${n}` }));
     }
   }
 }
 
-async function loadImage(file, out) {
-  status(`Reading ${file.name}`);
+function readImage(file) {
   const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(`${file.name} is not an image Pagefit can read.`)); i.src = url; });
-    const k = SRC_W / img.naturalWidth, H = Math.round(img.naturalHeight * k);
-    for (let off = 0; off < H; off += CHUNK_H) {
-      const c = document.createElement('canvas');
-      c.width = SRC_W; c.height = Math.min(CHUNK_H, H - off);
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(img, 0, -off, SRC_W, H);
-      out.push(analyze(c, off === 0, off + CHUNK_H >= H));
-    }
-  } finally { URL.revokeObjectURL(url); }
+  return new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => { URL.revokeObjectURL(url); res(i); };
+    i.onerror = () => { URL.revokeObjectURL(url); rej(new Error(`${file.name} is not an image Pagefit can read. Use PNG or JPG.`)); };
+    i.src = url;
+  });
 }
 
+const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+const isImg = f => f.type.startsWith('image/') || /\.(png|jpe?g|heic|webp)$/i.test(f.name);
+
 async function loadFiles(list) {
-  const files = [...list].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || f.type.startsWith('image/'));
-  if (!files.length) { status('Choose a PDF or an image (PNG, JPG, HEIC screenshots exported as JPG).'); return; }
-  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  const out = [];
+  const all = [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const pdfs = all.filter(isPdf), imgs = all.filter(isImg);
+  if (!pdfs.length && !imgs.length) { status('Choose a PDF, or screenshots as PNG or JPG.'); return; }
+  setMode(pdfs.length ? 'pdf' : 'shots');
   try {
-    for (const f of files) {
-      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) await loadPdf(f, out); else await loadImage(f, out);
-      await new Promise(r => setTimeout(r));
+    if (pdfs.length) {
+      const out = [];
+      for (const f of pdfs) { await loadPdf(f, out); await new Promise(r => setTimeout(r)); }
+      if (!out.some(s => !s.empty)) { status('No writing was found in that file. Is the page blank in the export?'); return; }
+      shots = null; $('cropcard').hidden = true;
+      segments = out;
+    } else {
+      await loadShots(imgs);
     }
   } catch (e) { status(e.message || 'That file could not be read.'); return; }
-  if (!out.some(s => !s.empty)) { status('No writing was found in that file. Is the page blank in the export?'); return; }
-  segments = out; isSample = false; manualEnds = [];
-  docName = files[0].name.replace(/\.[^.]+$/, '') || 'notes';
-  $('deskTitle').textContent = files.length > 1 ? `${docName} + ${files.length - 1} more` : docName;
+  isSample = false; breakKinds = [];
+  if (pdfs.length) {
+    docName = pdfs[0].name.replace(/\.[^.]+$/, '') || 'notes';
+    $('deskTitle').textContent = pdfs.length > 1 ? `${docName} + ${pdfs.length - 1} more` : docName;
+  } else {
+    docName = 'OneNote screenshots';
+    $('deskTitle').textContent = `${imgs.length} ${imgs.length === 1 ? 'screenshot' : 'screenshots'}`;
+  }
   status('');
+  if (shots) { showCrop(); buildFromShots(); } else rebuild(true);
+}
+
+/* ---------- screenshots ---------- */
+async function loadShots(files) {
+  const canvases = [];
+  for (const f of files) {
+    status(`Reading ${f.name}`);
+    const img = await readImage(f);
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0);
+    canvases.push(c);
+  }
+  status('Finding your note in the screenshots…');
+  await new Promise(r => setTimeout(r));
+  const same = canvases.every(c => c.width === canvases[0].width && c.height === canvases[0].height);
+  const crop = canvases.length > 1 && same ? guessCrop(canvases) : null;
+  shots = { canvases, crop: crop || { x: 0, y: 0, w: 1, h: 1 }, auto: !!crop, joins: [] };
+}
+
+// OneNote's toolbar, page list and status bar look the same in every screenshot, while
+// the note itself moves as you scroll. The note area is where pixels change between shots.
+function guessCrop(canvases) {
+  const w = canvases[0].width, h = canvases[0].height, step = 2, sw = Math.ceil(w / step);
+  const lum = canvases.map(c => {
+    const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    const l = new Uint8Array(sw * h);
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x += step, i++) { const p = (y * w + x) * 4; l[i] = (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]) | 0; }
+    return l;
+  });
+  const moved = new Uint8Array(sw * h);
+  for (let k = 1; k < lum.length; k++) {
+    const a = lum[k - 1], b = lum[k];
+    for (let i = 0; i < moved.length; i++) if (Math.abs(a[i] - b[i]) > 24) moved[i] = 1;
+  }
+  const rowMoved = new Uint32Array(h);
+  for (let y = 0; y < h; y++) { let c = 0; for (let x = 0; x < sw; x++) c += moved[y * sw + x]; rowMoved[y] = c; }
+  // group moving rows; drop small groups near the top or bottom edge (a clock or battery icon)
+  const rows = clusters(rowMoved, sw * 0.004, h * 0.03).filter(g => !(g.size < h * 0.05 && (g.a < h * 0.12 || g.b > h * 0.88)));
+  if (!rows.length) return null;
+  const top = rows[0].a, bottom = rows[rows.length - 1].b;
+  const colMoved = new Uint32Array(sw);
+  for (let y = top; y <= bottom; y++) for (let x = 0; x < sw; x++) colMoved[x] += moved[y * sw + x];
+  const cols = clusters(colMoved, 1, sw * 0.03);
+  if (!cols.length) return null;
+  const pad = Math.round(w * 0.006);
+  const x0 = Math.max(0, cols[0].a * step - pad), x1 = Math.min(w, (cols[cols.length - 1].b + 1) * step + pad);
+  if (x1 - x0 < w * 0.1 || bottom - top < h * 0.1) return null;
+  return { x: x0 / w, y: top / h, w: (x1 - x0) / w, h: (bottom + 1 - top) / h };
+}
+
+function clusters(counts, min, gap) {
+  const out = []; let cur = null, last = -Infinity;
+  for (let i = 0; i < counts.length; i++) {
+    if (counts[i] <= min) continue;
+    if (cur && i - last <= gap) { cur.b = i; cur.size++; }
+    else { cur = { a: i, b: i, size: 1 }; out.push(cur); }
+    last = i;
+  }
+  return out;
+}
+
+// Per row: how much writing falls in each of 28 vertical bands. Two screenshots overlap
+// where the bottom rows of one have the same pattern as the top rows of the next.
+function rowSignature(c) {
+  const w = c.width, h = c.height, B = 28, bw = w / B;
+  const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  const s = new Float32Array(h * B);
+  for (let y = 0; y < h; y++) {
+    const o = y * w * 4;
+    for (let x = 0; x < w; x += 2) { const p = o + x * 4; if (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2] < INK_LUM) s[y * B + ((x / bw) | 0)] += 2 / bw; }
+  }
+  return { s, h, B };
+}
+
+function overlapScore(A, Bs, o, step) {
+  const B = A.B; let diff = 0, sum = 0, inkRows = 0;
+  for (let k = 0; k < o; k += step) {
+    const ra = (A.h - o + k) * B, rb = k * B; let rowInk = 0;
+    for (let j = 0; j < B; j++) { const a = A.s[ra + j], b = Bs.s[rb + j]; diff += Math.abs(a - b); sum += a + b; rowInk += a; }
+    if (rowInk > 0.02) inkRows++;
+  }
+  return inkRows < 8 ? Infinity : diff / sum;
+}
+
+function findOverlap(A, Bs) {
+  const max = Math.min(A.h, Bs.h) - 1;
+  let best = 0, bestScore = Infinity;
+  for (let o = 24; o <= max; o += 4) {
+    const sc = overlapScore(A, Bs, o, 4);
+    if (sc <= bestScore) { bestScore = sc; best = o; }      // ties go to the larger overlap
+  }
+  if (bestScore > 0.15) {
+    // no match: harmless when the bottom of one and the top of the next are both blank paper
+    const inkIn = (S, from, to) => { let t = 0; for (let i = from * S.B; i < to * S.B; i++) t += S.s[i]; return t; };
+    return inkIn(A, A.h - 40, A.h) + inkIn(Bs, 0, 40) < 0.05 ? 0 : -1;
+  }
+  for (let o = Math.max(24, best - 4); o <= Math.min(max, best + 4); o++) {
+    const sc = overlapScore(A, Bs, o, 1);
+    if (sc <= bestScore) { bestScore = sc; best = o; }
+  }
+  return best;
+}
+
+function buildFromShots() {
+  const { canvases, crop } = shots;
+  const parts = canvases.map(c => {
+    const sx = Math.round(crop.x * c.width), sy = Math.round(crop.y * c.height);
+    const sw = Math.max(8, Math.round(crop.w * c.width)), sh = Math.max(8, Math.round(crop.h * c.height));
+    const o = document.createElement('canvas');
+    o.width = SRC_W; o.height = Math.max(1, Math.round(sh * SRC_W / sw));
+    const ctx = o.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, o.width, o.height);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(c, sx, sy, sw, sh, 0, 0, o.width, o.height);
+    return o;
+  });
+  const sigs = parts.map(rowSignature);
+  const segs = [], joins = [];
+  parts.forEach((p, i) => {
+    const found = i ? findOverlap(sigs[i - 1], sigs[i]) : 0, skip = Math.max(0, found);
+    if (i) joins.push(found);
+    let c = p;
+    if (skip) { c = document.createElement('canvas'); c.width = p.width; c.height = p.height - skip; c.getContext('2d').drawImage(p, 0, -skip); }
+    segs.push(Object.assign(analyze(c, i === 0, i === parts.length - 1), { src: `screenshot ${i + 1}` }));
+  });
+  shots.joins = joins;
+  updateCropText();
+  if (!segs.some(s => !s.empty)) { status('No writing was found inside the marked area. Drag the corners around your note.'); return; }
+  segments = segs; breakKinds = [];
   rebuild(true);
 }
+
+function showCrop() {
+  const c = shots.canvases[0], img = $('cropimg');
+  const k = Math.min(1, 900 / c.width);
+  img.width = Math.round(c.width * k); img.height = Math.round(c.height * k);
+  img.getContext('2d').drawImage(c, 0, 0, img.width, img.height);
+  $('cropcard').hidden = false;
+  placeBox();
+}
+
+function updateCropText() {
+  const n = shots.canvases.length, missed = shots.joins.filter(j => j < 0).length;
+  $('cropTitle').textContent = shots.auto ? 'Note area found' : 'Mark the note area';
+  $('cropHint').textContent = shots.auto
+    ? "Pagefit removed OneNote's toolbar and side panels. If part of your note is outside the box, drag a corner. The same area is used for every screenshot."
+    : n === 1
+    ? "Drag the corners so the box covers your note and not OneNote's toolbar or page list."
+    : "These screenshots have different sizes, so Pagefit could not find the toolbar. Drag the corners around your note.";
+  $('cropJoins').textContent = n < 2 ? '' : missed
+    ? `${n} screenshots · ${missed} ${missed === 1 ? 'pair has' : 'pairs have'} no overlap, so they were placed one after the other. If a line is missing, take the screenshots again with some overlap.`
+    : `${n} screenshots · joined where they overlap`;
+}
+
+function placeBox() {
+  const { x, y, w, h } = shots.crop, b = $('cropbox').style;
+  b.left = x * 100 + '%'; b.top = y * 100 + '%'; b.width = w * 100 + '%'; b.height = h * 100 + '%';
+}
+
+let dragging = null;
+$('cropbox').addEventListener('pointerdown', e => {
+  if (!e.target.dataset.h) return;
+  dragging = e.target.dataset.h; e.target.setPointerCapture(e.pointerId); e.preventDefault();
+});
+$('cropbox').addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const r = $('cropstage').getBoundingClientRect(), c = shots.crop;
+  const fx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), fy = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+  let x0 = c.x, y0 = c.y, x1 = c.x + c.w, y1 = c.y + c.h;
+  if (dragging.includes('w')) x0 = Math.min(fx, x1 - 0.05);
+  if (dragging.includes('e')) x1 = Math.max(fx, x0 + 0.05);
+  if (dragging.includes('n')) y0 = Math.min(fy, y1 - 0.05);
+  if (dragging.includes('s')) y1 = Math.max(fy, y0 + 0.05);
+  shots.crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  placeBox();
+});
+const endDrag = () => { if (!dragging) return; dragging = null; status('Joining screenshots…'); setTimeout(() => { status(''); buildFromShots(); }); };
+$('cropbox').addEventListener('pointerup', endDrag);
+$('cropbox').addEventListener('pointercancel', endDrag);
+
+function setMode(m) {
+  mode = m;
+  for (const b of $('mode').children) b.setAttribute('aria-pressed', b.dataset.v === m);
+  const pdf = m === 'pdf';
+  $('dropTitle').textContent = pdf ? 'Choose your OneNote PDF' : 'Choose your screenshots';
+  $('dropHint').textContent = pdf ? 'or drop it here' : 'select them all at once · overlap is fine';
+  $('modeHint').textContent = pdf ? 'Quickest. Choose Screenshots if the page is wider than the export.' : 'For pages wider than A4. Zoom out so the full width fits, then screenshot while scrolling down.';
+  $('file').accept = pdf ? 'application/pdf' : 'image/*';
+}
+$('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.v); });
 
 /* ---------- joining pages into one strip ---------- */
 function buildLayout() {
@@ -349,7 +627,15 @@ function buildLayout() {
       rowInk[p.off + r] = c;
     }
   }
-  return { L, R, stripW: R - L, pieces, totalH: off, rowInk };
+  // A "medium" gap is clearly taller than the usual space between two lines of writing
+  const gaps = [];
+  for (let r = 0, start = -1; r < off; r++) {
+    if (rowInk[r] <= NOISE) { if (start < 0) start = r; }
+    else { if (start > 0) gaps.push(r - start); start = -1; }
+  }
+  gaps.sort((a, b) => a - b);
+  const lineGap = gaps.length ? gaps[gaps.length >> 1] : 16;
+  return { L, R, stripW: R - L, pieces, totalH: off, rowInk, mediumGap: Math.max(28, Math.round(lineGap * 2.5)) };
 }
 
 function buildGeom() {
@@ -364,6 +650,7 @@ function buildGeom() {
 /* ---------- finding page breaks ---------- */
 const blank = r => layout.rowInk[r] <= NOISE;
 
+// Small break: the gap between lines that is nearest the bottom of the sheet
 function findBreak(y, lim) {
   const lo = Math.floor(y + 0.55 * geom.Hpx);
   let fallback = -1;
@@ -380,50 +667,44 @@ function findBreak(y, lim) {
   return best;
 }
 
+// Medium break: the bigger gap between two blocks of writing nearest the bottom of the
+// sheet, so a section, list or drawing stays together on the next sheet
+function findMediumBreak(y, lim) {
+  const lo = Math.floor(y + 0.25 * geom.Hpx);
+  for (let r = lim - 1; r >= lo; r--) {
+    if (!blank(r)) continue;
+    let a = r; while (a - 1 >= lo && blank(a - 1)) a--;
+    if (r - a + 1 >= layout.mediumGap) return Math.floor((a + r + 1) / 2);
+    r = a;
+  }
+  return null;
+}
+
 function paginate() {
   const { totalH } = layout; const H = geom.Hpx;
   pages = []; let y = 0;
   while (y < totalH && pages.length < 400) {
     while (y < totalH && blank(y)) y++;
     if (y >= totalH) break;
-    const i = pages.length; let end;
-    const man = manualEnds[i];
-    if (man != null && man > y && man <= y + H) end = man;
-    else if (y + H >= totalH) end = totalH;
-    else end = findBreak(y, y + H);
+    const i = pages.length; let end, kind = 'small';
+    if (y + H >= totalH) end = totalH;
+    else {
+      const medium = breakKinds[i] === 'medium' ? findMediumBreak(y, y + H) : null;
+      if (medium != null) { end = medium; kind = 'medium'; } else end = findBreak(y, y + H);
+    }
     if (end <= y) end = Math.min(totalH, y + H);
     const cut = end < totalH && !blank(end) && !blank(end - 1);
-    pages.push({ y0: y, y1: end, cut });
+    pages.push({ y0: y, y1: end, cut, kind });
     y = end;
   }
 }
 
-function gapAbove(from, lo) {
-  let r = from - 1;
-  while (r > lo && blank(r)) r--;
-  for (;;) {
-    while (r > lo && !blank(r)) r--;
-    if (r <= lo) return null;
-    const b = r; while (r > lo && blank(r)) r--;
-    if (b - r >= 4) return Math.floor((r + 1 + b + 1) / 2);
-  }
-}
-function gapBelow(from, hi) {
-  let r = from;
-  while (r < hi && blank(r)) r++;
-  for (;;) {
-    while (r < hi && !blank(r)) r++;
-    if (r >= hi) return null;
-    const a = r; while (r < hi && blank(r)) r++;
-    if (r - a >= 4 || r >= layout.totalH) return Math.min(hi, Math.floor((a + r) / 2));
-  }
-}
-function nudge(i, dir) {
-  const p = pages[i];
-  const next = dir < 0 ? gapAbove(p.y1, p.y0 + Math.floor(geom.Hpx * 0.1)) : gapBelow(p.y1, Math.min(layout.totalH, p.y0 + geom.Hpx));
-  if (next == null) { status(dir < 0 ? 'No earlier gap on this sheet.' : 'The next gap would not fit on this sheet.'); return; }
-  manualEnds = manualEnds.slice(0, i); manualEnds[i] = next;
-  status(''); paginate(); renderPreviews();
+function setBreak(i, kind) {
+  breakKinds = breakKinds.slice(0, i); breakKinds[i] = kind;
+  paginate();
+  status(kind === 'medium' && pages[i].kind !== 'medium' ? `Sheet ${i + 1} has no bigger gap, so it keeps the small break.` : '');
+  if (pages[i].kind !== kind) breakKinds[i] = pages[i].kind;
+  renderPreviews();
 }
 
 /* ---------- drawing sheets ---------- */
@@ -459,28 +740,41 @@ function renderPreviews() {
     const meta = document.createElement('div'); meta.className = 'meta';
     const num = document.createElement('span'); num.className = 'num'; num.textContent = `Sheet ${i + 1}`;
     meta.append(num);
-    if (i < n - 1) {
-      const chip = document.createElement('span');
-      chip.className = pg.cut ? 'chip warn' : 'chip ok';
-      chip.textContent = pg.cut ? 'Break cuts writing' : 'Clean break';
+    if (pg.cut && i < n - 1) {
+      const chip = document.createElement('span'); chip.className = 'chip warn'; chip.textContent = 'Break cuts writing';
       meta.append(chip);
-      const ng = document.createElement('div'); ng.className = 'nudges';
-      const up = document.createElement('button'); up.type = 'button'; up.className = 'btn-ghost'; up.textContent = '↑ Earlier break';
-      up.onclick = () => nudge(i, -1);
-      const dn = document.createElement('button'); dn.type = 'button'; dn.className = 'btn-ghost'; dn.textContent = '↓ Later break';
-      dn.onclick = () => nudge(i, 1);
-      ng.append(up, dn); meta.append(ng);
     }
-    el.append(c, meta); box.append(el);
+    el.append(c, meta);
+    if (i < n - 1) {
+      const sg = document.createElement('div'); sg.className = 'seg seg-sm';
+      sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', `Page break at the bottom of sheet ${i + 1}`);
+      for (const [kind, label] of [['small', 'Small break'], ['medium', 'Medium break']]) {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+        b.setAttribute('aria-pressed', pg.kind === kind);
+        b.title = kind === 'small' ? 'Break at the gap between lines nearest the bottom' : 'Break at a bigger gap, so the next section starts on a new sheet';
+        b.onclick = () => { if (pg.kind !== kind) setBreak(i, kind); };
+        sg.append(b);
+      }
+      el.append(sg);
+    }
+    box.append(el);
   });
   const src = segments.filter(s => s.trimTop).length;
   const cuts = pages.filter((p, i) => p.cut && i < n - 1).length;
   const paper = opts.paper === 'a4' ? 'A4' : 'Letter';
-  $('summary').textContent = `${src} source ${src === 1 ? 'page' : 'pages'} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}`;
-  $('note').innerHTML = isSample
+  const from = shots ? `${shots.canvases.length} ${shots.canvases.length === 1 ? 'screenshot' : 'screenshots'}` : `${src} source ${src === 1 ? 'page' : 'pages'}`;
+  $('summary').textContent = `${from} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}`;
+  const clipped = [...new Set(segments.filter(s => s.clipped).map(s => s.src))];
+  const note = $('note');
+  note.classList.toggle('warn', clipped.length > 0);
+  note.innerHTML = clipped.length && shots
+    ? `<b>Writing touches the right edge of ${clipped.length > 3 ? clipped.length + ' screenshots' : clipped.join(', ')}.</b> If it continues past the edge, zoom out further in OneNote and take the screenshots again, or drag the box wider if it is cutting into the note.`
+    : clipped.length
+    ? `<b>Writing is cut off at the right edge of ${clipped.length > 3 ? clipped.length + ' pages' : clipped.join(', ')} in this file.</b> OneNote cropped it when it made the PDF, so the missing part isn't in the file. Use <b>Screenshots</b> instead: see <a href="#guide">Getting your notes out of OneNote</a> below.`
+    : isSample
     ? '<b>This is a sample.</b> The original export split the line “W = ∫ p dV” across two pages. Pagefit joined it again and moved every break into a gap between lines. Choose your own PDF to replace the sample.'
-    : cuts ? `<b>${cuts} ${cuts === 1 ? 'break goes' : 'breaks go'} through writing</b> because there was no gap nearby. Use Earlier break on the flagged ${cuts === 1 ? 'sheet' : 'sheets'}, or lower the writing size.`
-    : '<b>Every break sits in a gap between lines.</b> Check the sheets, then download.';
+    : cuts ? `<b>${cuts} ${cuts === 1 ? 'break goes' : 'breaks go'} through writing</b> because there was no gap nearby. Lower the writing size or the margins to give each sheet more room.`
+    : '<b>Every break sits in a gap between lines.</b> Choose Medium break under a sheet to keep a whole section together on the next one.';
 }
 
 function rebuild(resetLayout) {
@@ -584,14 +878,14 @@ function seg(id, key) {
     const b = e.target.closest('button'); if (!b) return;
     opts[key] = b.dataset.v;
     for (const x of $(id).children) x.setAttribute('aria-pressed', x === b);
-    manualEnds = []; rebuild(false);
+    breakKinds = []; rebuild(false);
   });
 }
 seg('paper', 'paper'); seg('orient', 'orient');
-$('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; manualEnds = []; rebuild(false); });
-$('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; manualEnds = []; rebuild(false); });
-$('trim').addEventListener('change', e => { opts.trim = e.target.checked; manualEnds = []; rebuild(true); });
-$('nums').addEventListener('change', e => { opts.nums = e.target.checked; manualEnds = []; rebuild(false); });
+$('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; breakKinds = []; rebuild(false); });
+$('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; breakKinds = []; rebuild(false); });
+$('trim').addEventListener('change', e => { opts.trim = e.target.checked; breakKinds = []; rebuild(true); });
+$('nums').addEventListener('change', e => { opts.nums = e.target.checked; breakKinds = []; rebuild(false); });
 $('file').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
 $('save').addEventListener('click', savePdf);
 const drop = $('drop');
