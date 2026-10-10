@@ -402,7 +402,7 @@ const PRINTED = [
   new RegExp('^\\s*\\d{1,2}\\.?\\s+' + MONTH + '\\s+\\d{2,4}', 'i'),   // 10 oktober 2026
   new RegExp('^\\s*' + MONTH + '\\s+\\d{1,2},?\\s+\\d{4}', 'i'),       // October 10, 2026
   /onenote/i,
-  /^\s*(https?:\/\/|www\.)/i,
+  /^\s*(https?:\/\/|file:\/\/|www\.)/i,
 ];
 const isPrinted = text => PRINTED.some(re => re.test(text));
 
@@ -429,14 +429,31 @@ async function printedLines(page, vp) {
 }
 
 // Draw the page as usual but leave out the letters of those lines. Only the letters are
-// skipped, so handwriting that runs underneath them stays whole.
+// skipped, so handwriting that runs underneath them stays whole. PDF.js draws a letter
+// either as text or as a filled shape placed at the letter's position, so both are checked.
 function skipTextIn(ctx, boxes) {
+  const inBox = (px, py) => boxes.some(b => px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1);
   for (const name of ['fillText', 'strokeText']) {
     const draw = ctx[name];
     ctx[name] = function (text, x, y, ...rest) {
-      const m = this.getTransform(), px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f;
-      if (boxes.some(b => px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1)) return;
+      const m = this.getTransform();
+      if (inBox(m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f)) return;
       return draw.call(this, text, x, y, ...rest);
+    };
+  }
+  // a letter drawn as a shape: PDF.js moves to the letter (translate), traces it, then fills
+  // it while still at that exact position. Pen strokes are never drawn this way.
+  let letterAt = null;
+  const translate = ctx.translate;
+  ctx.translate = function (...args) { translate.apply(this, args); letterAt = this.getTransform(); };
+  const atLetter = m => letterAt && m.a === letterAt.a && m.b === letterAt.b && m.c === letterAt.c
+    && m.d === letterAt.d && m.e === letterAt.e && m.f === letterAt.f;
+  for (const name of ['fill', 'stroke']) {
+    const draw = ctx[name];
+    ctx[name] = function (...args) {
+      const m = this.getTransform();
+      if (atLetter(m) && inBox(m.e, m.f)) return;
+      return draw.apply(this, args);
     };
   }
 }
