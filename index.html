@@ -106,7 +106,12 @@ button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px sol
 .meta .num { font: 500 .78rem var(--f-mono); color: var(--muted); margin-right: auto; }
 .chip { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
-.seg-sm button { font-size: .82rem; padding: 5px 4px; }
+.paper { position: relative; cursor: pointer; }
+.paper.on-space { cursor: not-allowed; }
+.guide-line { position: absolute; left: 4%; right: 4%; height: 0; border-top: 2px dashed var(--accent); pointer-events: none; }
+.guide-line span { position: absolute; right: 0; top: -11px; background: var(--accent); color: var(--accent-fg); font: 600 .7rem var(--f-body); padding: 1px 7px; border-radius: 99px; }
+.pop { position: absolute; left: 50%; transform: translate(-50%, 10px); z-index: 2; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); font-size: .85rem; white-space: nowrap; cursor: default; }
+.pop-x { border: 0; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 2px 6px; cursor: pointer; border-radius: 4px; }
 .note.warn { background: var(--warn-soft); border-color: transparent; color: var(--fg); }
 .note.warn b { color: var(--warn); }
 .note a { color: var(--accent); }
@@ -263,7 +268,7 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
     </div>
     <div class="tip">
       <h3>How Pagefit places page breaks</h3>
-      <p>Pagefit measures every row of pixels and puts each page break in a gap between lines. Under each sheet you choose the break at its bottom: <b>Small break</b> cuts at the gap nearest the bottom, <b>Medium break</b> waits for a bigger gap so a whole section moves to the next sheet. With screenshots, Pagefit also finds where they overlap and removes OneNote's toolbar.</p>
+      <p>Pagefit measures every row of pixels and puts each page break in a gap between lines. To move writing further down, click a sheet where you want extra space and choose 2 cm or 4 cm. The space snaps to the nearest gap between lines, and whatever no longer fits moves to the next sheet. Click a space to remove it. With screenshots, Pagefit also finds where they overlap and removes OneNote's toolbar.</p>
     </div>
   </section>
 </div>
@@ -285,7 +290,7 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.clo
 const $ = id => document.getElementById(id);
 const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true, nums: true };
 let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
-let layout = null, geom = null, pages = [], breakKinds = [];
+let layout = null, geom = null, pages = [], spaces = [];   // spaces: { y: row of the joined note, pt: height }
 let mode = 'pdf', shots = null;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
 
 let downloads = null;
@@ -395,7 +400,7 @@ async function loadFiles(list) {
       await loadShots(imgs);
     }
   } catch (e) { status(e.message || 'That file could not be read.'); return; }
-  isSample = false; breakKinds = [];
+  isSample = false;
   if (pdfs.length) {
     docName = pdfs[0].name.replace(/\.[^.]+$/, '') || 'notes';
     $('deskTitle').textContent = pdfs.length > 1 ? `${docName} + ${pdfs.length - 1} more` : docName;
@@ -536,7 +541,7 @@ function buildFromShots() {
   shots.joins = joins;
   updateCropText();
   if (!segs.some(s => !s.empty)) { status('No writing was found inside the marked area. Drag the corners around your note.'); return; }
-  segments = segs; breakKinds = [];
+  segments = segs;
   rebuild(true);
 }
 
@@ -627,15 +632,7 @@ function buildLayout() {
       rowInk[p.off + r] = c;
     }
   }
-  // A "medium" gap is clearly taller than the usual space between two lines of writing
-  const gaps = [];
-  for (let r = 0, start = -1; r < off; r++) {
-    if (rowInk[r] <= NOISE) { if (start < 0) start = r; }
-    else { if (start > 0) gaps.push(r - start); start = -1; }
-  }
-  gaps.sort((a, b) => a - b);
-  const lineGap = gaps.length ? gaps[gaps.length >> 1] : 16;
-  return { L, R, stripW: R - L, pieces, totalH: off, rowInk, mediumGap: Math.max(28, Math.round(lineGap * 2.5)) };
+  return { L, R, stripW: R - L, pieces, totalH: off, rowInk };
 }
 
 function buildGeom() {
@@ -650,9 +647,9 @@ function buildGeom() {
 /* ---------- finding page breaks ---------- */
 const blank = r => layout.rowInk[r] <= NOISE;
 
-// Small break: the gap between lines that is nearest the bottom of the sheet
+// The gap between lines nearest the bottom of the space available on the sheet
 function findBreak(y, lim) {
-  const lo = Math.floor(y + 0.55 * geom.Hpx);
+  const lo = Math.floor(y + 0.55 * (lim - y));
   let fallback = -1;
   for (let r = lim - 1; r >= lo; r--) {
     if (!blank(r)) continue;
@@ -667,48 +664,64 @@ function findBreak(y, lim) {
   return best;
 }
 
-// Medium break: the bigger gap between two blocks of writing nearest the bottom of the
-// sheet, so a section, list or drawing stays together on the next sheet
-function findMediumBreak(y, lim) {
-  const lo = Math.floor(y + 0.25 * geom.Hpx);
-  for (let r = lim - 1; r >= lo; r--) {
-    if (!blank(r)) continue;
-    let a = r; while (a - 1 >= lo && blank(a - 1)) a--;
-    if (r - a + 1 >= layout.mediumGap) return Math.floor((a + r + 1) / 2);
-    r = a;
-  }
-  return null;
-}
+// Extra empty space a teacher adds by clicking a sheet. It is anchored to a row of the
+// joined note, so it stays with the same line of writing when paper or margins change.
+const SPACE_SIZES = [20 * MM, 40 * MM];   // 2 cm and 4 cm, in points
+const spacePx = sp => Math.round(sp.pt / geom.s);
 
 function paginate() {
-  const { totalH } = layout; const H = geom.Hpx;
+  const { totalH } = layout, H = geom.Hpx;
+  const sorted = spaces.map((sp, idx) => ({ ...sp, idx })).sort((a, b) => a.y - b.y);
+  const placed = new Set();
   pages = []; let y = 0;
   while (y < totalH && pages.length < 400) {
     while (y < totalH && blank(y)) y++;
     if (y >= totalH) break;
-    const i = pages.length; let end, kind = 'small';
-    if (y + H >= totalH) end = totalH;
-    else {
-      const medium = breakKinds[i] === 'medium' ? findMediumBreak(y, y + H) : null;
-      if (medium != null) { end = medium; kind = 'medium'; } else end = findBreak(y, y + H);
+    // every space on this sheet takes its height away from the writing
+    let lim = y + H; const mine = [];
+    for (const sp of sorted) {
+      if (placed.has(sp.idx) || sp.y < y - 1) continue;
+      if (sp.y >= lim) break;
+      lim -= spacePx(sp); mine.push(sp); placed.add(sp.idx);
     }
-    if (end <= y) end = Math.min(totalH, y + H);
+    lim = Math.max(lim, y + Math.round(H * 0.15));
+    let end = lim >= totalH ? totalH : findBreak(y, lim);
+    if (end <= y) end = Math.min(totalH, lim);
     const cut = end < totalH && !blank(end) && !blank(end - 1);
-    pages.push({ y0: y, y1: end, cut, kind });
+    pages.push({ y0: y, y1: end, cut, spaces: mine });
     y = end;
   }
 }
 
-function setBreak(i, kind) {
-  breakKinds = breakKinds.slice(0, i); breakKinds[i] = kind;
-  paginate();
-  status(kind === 'medium' && pages[i].kind !== 'medium' ? `Sheet ${i + 1} has no bigger gap, so it keeps the small break.` : '');
-  if (pages[i].kind !== kind) breakKinds[i] = pages[i].kind;
-  renderPreviews();
+// What goes down a sheet, top to bottom: stretches of writing and added spaces.
+// `top` is in points below the top margin.
+function pageItems(pg) {
+  const items = []; let at = pg.y0, top = 0;
+  for (const sp of pg.spaces) {
+    const p = Math.min(Math.max(sp.y, at), pg.y1);
+    if (p > at) { items.push({ a: at, b: p, top }); top += (p - at) * geom.s; at = p; }
+    items.push({ space: sp, top, h: sp.pt }); top += sp.pt;
+  }
+  if (pg.y1 > at) items.push({ a: at, b: pg.y1, top });
+  return items;
+}
+
+// Move a clicked row to the middle of the nearest gap between lines on that sheet
+function snapToGap(row, pg) {
+  for (let d = 0; d < pg.y1 - pg.y0; d++) {
+    for (const r of [row - d, row + d]) {
+      if (r <= pg.y0 || r >= pg.y1 || !blank(r)) continue;
+      let a = r, b = r;
+      while (a - 1 > pg.y0 && blank(a - 1)) a--;
+      while (b + 1 < pg.y1 && blank(b + 1)) b++;
+      return Math.floor((a + b + 1) / 2);
+    }
+  }
+  return row;
 }
 
 /* ---------- drawing sheets ---------- */
-function renderPage(pg, idx, total, targetW) {
+function renderPage(pg, idx, total, targetW, preview = false) {
   const g = geom, k = targetW / g.pw;
   const c = document.createElement('canvas');
   c.width = Math.round(g.pw * k); c.height = Math.round(g.ph * k);
@@ -716,11 +729,26 @@ function renderPage(pg, idx, total, targetW) {
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
   ctx.imageSmoothingQuality = 'high';
   const x0 = (g.m + (g.cw - g.drawnW) / 2) * k, yTop = g.m * k, f = g.s * k;
-  for (const p of layout.pieces) {
-    const a = Math.max(pg.y0, p.off), b = Math.min(pg.y1, p.off + p.h);
-    if (b <= a) continue;
-    ctx.drawImage(p.seg.canvas, layout.L, p.y0 + (a - p.off), layout.stripW, b - a,
-      x0, yTop + (a - pg.y0) * f, layout.stripW * f, (b - a) * f);
+  for (const it of pageItems(pg)) {
+    const top = yTop + it.top * k;
+    if (it.space) {
+      if (!preview) continue;                 // the printed sheet just gets white space
+      ctx.fillStyle = 'rgba(36, 67, 176, 0.07)';
+      ctx.fillRect(g.m * k, top, g.cw * k, it.h * k);
+      ctx.strokeStyle = 'rgba(36, 67, 176, 0.55)'; ctx.lineWidth = Math.max(1, k * 0.6); ctx.setLineDash([4 * k, 3 * k]);
+      ctx.strokeRect(g.m * k, top, g.cw * k, it.h * k); ctx.setLineDash([]);
+      ctx.fillStyle = '#2443B0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `600 ${Math.min(22, it.h * 0.4) * k}px "Source Sans 3", sans-serif`;
+      ctx.fillText(`${Math.round(it.h / MM / 10)} cm space · click to remove`, c.width / 2, top + it.h * k / 2);
+      ctx.textBaseline = 'alphabetic';
+      continue;
+    }
+    for (const p of layout.pieces) {
+      const a = Math.max(it.a, p.off), b = Math.min(it.b, p.off + p.h);
+      if (b <= a) continue;
+      ctx.drawImage(p.seg.canvas, layout.L, p.y0 + (a - p.off), layout.stripW, b - a,
+        x0, top + (a - it.a) * f, layout.stripW * f, (b - a) * f);
+    }
   }
   if (opts.nums) {
     ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
@@ -735,8 +763,13 @@ function renderPreviews() {
   const n = pages.length;
   pages.forEach((pg, i) => {
     const el = document.createElement('div'); el.className = 'sheet';
-    const c = renderPage(pg, i, n, 460);
-    c.setAttribute('role', 'img'); c.setAttribute('aria-label', `Sheet ${i + 1} of ${n}`);
+    const c = renderPage(pg, i, n, 460, true);
+    c.setAttribute('role', 'img'); c.setAttribute('aria-label', `Sheet ${i + 1} of ${n}. Click where you want extra space.`);
+    const paper = document.createElement('div'); paper.className = 'paper';
+    const line = document.createElement('div'); line.className = 'guide-line'; line.hidden = true;
+    line.innerHTML = '<span>Add space</span>';
+    paper.append(c, line);
+    wireSheet(paper, c, line, pg);
     const meta = document.createElement('div'); meta.className = 'meta';
     const num = document.createElement('span'); num.className = 'num'; num.textContent = `Sheet ${i + 1}`;
     meta.append(num);
@@ -744,19 +777,7 @@ function renderPreviews() {
       const chip = document.createElement('span'); chip.className = 'chip warn'; chip.textContent = 'Break cuts writing';
       meta.append(chip);
     }
-    el.append(c, meta);
-    if (i < n - 1) {
-      const sg = document.createElement('div'); sg.className = 'seg seg-sm';
-      sg.setAttribute('role', 'group'); sg.setAttribute('aria-label', `Page break at the bottom of sheet ${i + 1}`);
-      for (const [kind, label] of [['small', 'Small break'], ['medium', 'Medium break']]) {
-        const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
-        b.setAttribute('aria-pressed', pg.kind === kind);
-        b.title = kind === 'small' ? 'Break at the gap between lines nearest the bottom' : 'Break at a bigger gap, so the next section starts on a new sheet';
-        b.onclick = () => { if (pg.kind !== kind) setBreak(i, kind); };
-        sg.append(b);
-      }
-      el.append(sg);
-    }
+    el.append(paper, meta);
     box.append(el);
   });
   const src = segments.filter(s => s.trimTop).length;
@@ -774,14 +795,78 @@ function renderPreviews() {
     : isSample
     ? '<b>This is a sample.</b> The original export split the line “W = ∫ p dV” across two pages. Pagefit joined it again and moved every break into a gap between lines. Choose your own PDF to replace the sample.'
     : cuts ? `<b>${cuts} ${cuts === 1 ? 'break goes' : 'breaks go'} through writing</b> because there was no gap nearby. Lower the writing size or the margins to give each sheet more room.`
-    : '<b>Every break sits in a gap between lines.</b> Choose Medium break under a sheet to keep a whole section together on the next one.';
+    : '<b>Every break sits in a gap between lines.</b> To move writing further down, click a sheet where you want extra space and choose 2 cm or 4 cm. Click a space to remove it.';
 }
 
 function rebuild(resetLayout) {
-  if (resetLayout || !layout) layout = buildLayout();
+  if (resetLayout || !layout) { layout = buildLayout(); spaces = []; closePop(); }
   geom = buildGeom();
   paginate(); renderPreviews();
 }
+
+/* ---------- adding space by clicking a sheet ---------- */
+// Where on the sheet the pointer is: an added space, or a row of the note
+function hitTest(e, c, pg) {
+  const r = c.getBoundingClientRect(), g = geom;
+  const rel = (e.clientY - r.top) / r.height * g.ph - g.m;
+  const items = pageItems(pg);
+  for (const it of items) {
+    if (it.space && rel >= it.top && rel < it.top + it.h) return { space: it.space };
+  }
+  let row = pg.y0;
+  for (const it of items) if (!it.space && rel >= it.top) row = Math.min(it.b, it.a + Math.round((rel - it.top) / g.s));
+  return { row: snapToGap(row, pg) };
+}
+
+// Position of a note row on the sheet, in CSS pixels from the top of the canvas
+function rowToCss(row, c, pg) {
+  const r = c.getBoundingClientRect(), g = geom;
+  let top = 0;
+  for (const it of pageItems(pg)) {
+    if (it.space) { if (it.space.y <= row) top = it.top + it.h; continue; }
+    if (row >= it.a && row <= it.b) { top = it.top + (row - it.a) * g.s; break; }
+  }
+  return (g.m + top) / g.ph * r.height;
+}
+
+let pop = null;
+function closePop() {
+  if (pop) { pop.remove(); pop = null; }
+  document.querySelectorAll('.guide-line.keep').forEach(l => { l.classList.remove('keep'); l.hidden = true; });
+}
+
+function wireSheet(paper, c, line, pg) {
+  paper.addEventListener('pointermove', e => {
+    if (pop) return;
+    const h = hitTest(e, c, pg);
+    paper.classList.toggle('on-space', !!h.space);
+    line.hidden = !!h.space;
+    if (!h.space) line.style.top = rowToCss(h.row, c, pg) + 'px';
+  });
+  paper.addEventListener('pointerleave', () => { if (!line.classList.contains('keep')) line.hidden = true; });
+  c.addEventListener('click', e => {
+    e.stopPropagation();
+    const h = hitTest(e, c, pg);
+    closePop();
+    if (h.space) { spaces.splice(h.space.idx, 1); paginate(); renderPreviews(); return; }
+    const y = rowToCss(h.row, c, pg);
+    line.style.top = y + 'px'; line.hidden = false; line.classList.add('keep');
+    pop = document.createElement('div'); pop.className = 'pop'; pop.style.top = y + 'px';
+    pop.innerHTML = '<span>Add space</span>';
+    SPACE_SIZES.forEach((pt, j) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn-ghost'; b.textContent = `${j ? 4 : 2} cm`;
+      b.onclick = ev => { ev.stopPropagation(); spaces.push({ y: h.row, pt }); closePop(); paginate(); renderPreviews(); };
+      pop.append(b);
+    });
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'pop-x'; x.textContent = '×'; x.setAttribute('aria-label', 'Cancel');
+    x.onclick = ev => { ev.stopPropagation(); closePop(); };
+    pop.append(x);
+    pop.addEventListener('click', ev => ev.stopPropagation());
+    paper.append(pop);
+  });
+}
+document.addEventListener('click', closePop);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
 
 /* ---------- export ---------- */
 async function savePdf() {
@@ -878,14 +963,14 @@ function seg(id, key) {
     const b = e.target.closest('button'); if (!b) return;
     opts[key] = b.dataset.v;
     for (const x of $(id).children) x.setAttribute('aria-pressed', x === b);
-    breakKinds = []; rebuild(false);
+    rebuild(false);
   });
 }
 seg('paper', 'paper'); seg('orient', 'orient');
-$('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; breakKinds = []; rebuild(false); });
-$('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; breakKinds = []; rebuild(false); });
-$('trim').addEventListener('change', e => { opts.trim = e.target.checked; breakKinds = []; rebuild(true); });
-$('nums').addEventListener('change', e => { opts.nums = e.target.checked; breakKinds = []; rebuild(false); });
+$('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; rebuild(false); });
+$('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; rebuild(false); });
+$('trim').addEventListener('change', e => { opts.trim = e.target.checked; rebuild(true); });
+$('nums').addEventListener('change', e => { opts.nums = e.target.checked; rebuild(false); });
 $('file').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
 $('save').addEventListener('click', savePdf);
 const drop = $('drop');
