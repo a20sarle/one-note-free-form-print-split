@@ -186,7 +186,6 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
         <label class="label" for="margin">Margins <output id="marginOut">12 mm</output></label>
         <input type="range" id="margin" min="5" max="25" step="1" value="12">
       </div>
-      <label class="check"><input type="checkbox" id="footer" checked><span>Remove footer<small id="footerHint">The line OneNote adds at the bottom of each exported page.</small></span></label>
       <label class="check"><input type="checkbox" id="trim" checked><span>Remove empty space<small>Crops blank edges so the writing fills the page width.</small></span></label>
 
       <button class="btn" id="save" type="button">Download PDF</button>
@@ -302,10 +301,10 @@ const MIN_GAP = 6;           // rows of blank space needed for a clean break
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const $ = id => document.getElementById(id);
-const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true, footer: true };
+const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true };
 let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
 let layout = null, geom = null, pages = [], spaces = [];   // spaces: { y: row of the joined note, pt: height }
-let mode = 'pdf', shots = null;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
+let mode = 'pdf', shots = null, removedLines = 0;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
 
 let downloads = null;
 (async () => { try { if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); } catch (e) {} })();
@@ -373,97 +372,74 @@ async function loadPdf(file, out) {
     const page = await pdf.getPage(n);
     const vp = page.getViewport({ scale: SRC_W / page.getViewport({ scale: 1 }).width });
     const W = Math.round(vp.width), H = Math.round(vp.height);
-    const text = await textRows(page, vp);
+    const printed = await printedLines(page, vp);
+    removedLines += printed.length;
+    const boxes = printed.flatMap(l => l.boxes);
     for (let off = 0; off < H; off += CHUNK_H) {
       const c = document.createElement('canvas');
       c.width = W; c.height = Math.min(CHUNK_H, H - off);
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      if (boxes.length) skipTextIn(ctx, boxes.map(b => ({ ...b, y0: b.y0 - off, y1: b.y1 - off })));
       // 'print' intent renders without waiting for animation frames, so it keeps going in a background tab
       await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, 0, -off], intent: 'print' }).promise;
-      const seg = Object.assign(analyze(c, off === 0, off + CHUNK_H >= H), { src: `page ${n}` });
-      if (seg.trimBottom) seg.text = text.map(t => ({ y0: t.y0 - off, y1: t.y1 - off }));
-      out.push(seg);
+      out.push(Object.assign(analyze(c, off === 0, off + CHUNK_H >= H), { src: `page ${n}` }));
     }
   }
-  findFooters(out);
 }
 
-// Where the PDF has real text on a page, as rows of the rendered canvas
-async function textRows(page, vp) {
-  try {
-    const tc = await page.getTextContent();
-    return tc.items.filter(it => it.str && it.str.trim()).map(it => {
-      const [, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
-      const hgt = Math.max(4, (it.height || Math.hypot(it.transform[2], it.transform[3])) * vp.scale);
-      return { y0: y - hgt, y1: y + hgt * 0.3 };
-    });
-  } catch (e) { return []; }
-}
+/* ---------- printed headers and footers ---------- */
+// When a note is printed or saved as PDF (OneNote on the web through the browser, for
+// example), lines like "10/10/26, 5:24 PM   OneNote" and "https://onedrive.live.com/…  1/7"
+// are added as typed text. Handwriting is stored as pen strokes, never as text, so only
+// typed lines are looked at, and only ones that start with a date, a time or a web address,
+// or that say OneNote.
+const MONTH = '(jan|feb|mar|apr|maj|may|jun|jul|aug|sep|okt|oct|nov|dec)[a-zåäö]*\\.?';
+const PRINTED = [
+  /^\s*\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}\b/,                 // 10/10/26, 2026-10-10, 10.10.2026
+  /^\s*\d{1,2}:\d{2}\b/,                                         // 5:24 PM, 17:24
+  /^\s*\d{1,2}\.\d{2}\s*[ap]\.?m\b/i,                            // 5.24 pm (but not a decimal like 0.05)
+  new RegExp('^\\s*\\d{1,2}\\.?\\s+' + MONTH + '\\s+\\d{2,4}', 'i'),   // 10 oktober 2026
+  new RegExp('^\\s*' + MONTH + '\\s+\\d{1,2},?\\s+\\d{4}', 'i'),       // October 10, 2026
+  /onenote/i,
+  /^\s*(https?:\/\/|www\.)/i,
+];
+const isPrinted = text => PRINTED.some(re => re.test(text));
 
-/* ---------- footers ---------- */
-// OneNote's PDF export (and a browser's print dialog) adds a small line of text below the
-// note on every page: the page title, a date or a page number. It sits on its own in the
-// bottom margin, at the same height on every page. A candidate counts as a footer when it
-// is at the same height on most pages, or when the PDF says it is typed text.
-function footerCandidate(seg) {
-  const { w, h, mask, ruledRow, ruledCol } = seg;
-  const inkRow = y => {
-    if (ruledRow[y]) return false;
-    const o = y * w; let c = 0;
-    for (let x = 0; x < w; x++) if (mask[o + x] && !ruledCol[x] && ++c > NOISE) return true;
-    return false;
-  };
-  const floor = Math.floor(h * 0.86), smallGap = Math.max(3, Math.round(h * 0.006)), bigGap = Math.max(10, Math.round(h * 0.015));
-  let b = h - 1;
-  while (b > floor && !inkRow(b)) b--;
-  if (b <= floor) return null;
-  let a = b, blankRun = 0, y = b - 1;
-  for (; y > floor - bigGap; y--) {
-    if (inkRow(y)) { if (blankRun >= bigGap) break; a = y; blankRun = 0; }
-    else if (++blankRun >= bigGap) break;
+async function printedLines(page, vp) {
+  let items;
+  try { items = (await page.getTextContent()).items; } catch (e) { return []; }
+  const words = items.filter(it => it.str && it.str.trim()).map(it => {
+    const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+    const size = (Math.hypot(it.transform[2], it.transform[3]) || it.height || 10) * vp.scale;
+    return { str: it.str, x, y, size, w: (it.width || 0) * vp.scale };
+  }).sort((a, b) => a.y - b.y || a.x - b.x);
+  // words on the same baseline form one line
+  const lines = [];
+  for (const wd of words) {
+    const line = lines.find(l => Math.abs(l.y - wd.y) < Math.max(l.size, wd.size) * 0.5);
+    if (line) line.words.push(wd); else lines.push({ y: wd.y, size: wd.size, words: [wd] });
   }
-  if (blankRun < bigGap || a < floor || b - a > h * 0.04) return null;
-  // writing that OneNote sliced through ends in a straight edge, with as much ink in its last
-  // rows as anywhere else; a line of text thins out to a few descender tips at the bottom
-  const rowInk = y => { const o = y * w; let c = 0; for (let x = 0; x < w; x++) if (mask[o + x] && !ruledCol[x]) c++; return c; };
-  let most = 0;
-  for (let y = a; y <= b; y++) most = Math.max(most, rowInk(y));
-  if ((rowInk(b) + rowInk(Math.max(a, b - 1))) / 2 >= 0.3 * most) return null;
-  return { a, b };
+  return lines.map(l => {
+    l.words.sort((a, b) => a.x - b.x);
+    l.text = l.words.map(wd => wd.str).join(' ');
+    l.boxes = l.words.map(wd => ({ x0: wd.x - 3, x1: wd.x + wd.w + 3, y0: wd.y - wd.size * 1.15, y1: wd.y + wd.size * 0.4 }));
+    return l;
+  }).filter(l => isPrinted(l.text));
 }
 
-function boundsAbove(seg, yMax) {
-  const { w, mask, ruledRow, ruledCol } = seg;
-  let top = -1, bottom = -1, left = w, right = -1;
-  for (let y = 0; y < yMax; y++) {
-    if (ruledRow[y]) continue;
-    const o = y * w; let c = 0, l = -1, r = -1;
-    for (let x = 0; x < w; x++) if (mask[o + x] && !ruledCol[x]) { c++; if (l < 0) l = x; r = x; }
-    if (c <= NOISE) continue;
-    if (top < 0) top = y;
-    bottom = y; if (l < left) left = l; if (r > right) right = r;
+// Draw the page as usual but leave out the letters of those lines. Only the letters are
+// skipped, so handwriting that runs underneath them stays whole.
+function skipTextIn(ctx, boxes) {
+  for (const name of ['fillText', 'strokeText']) {
+    const draw = ctx[name];
+    ctx[name] = function (text, x, y, ...rest) {
+      const m = this.getTransform(), px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f;
+      if (boxes.some(b => px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1)) return;
+      return draw.call(this, text, x, y, ...rest);
+    };
   }
-  return { top, bottom, left, right };
 }
-
-function findFooters(segs) {
-  const ends = segs.filter(s => s.trimBottom);
-  const cands = ends.map(footerCandidate);
-  const found = cands.filter(Boolean);
-  const mid = found.length ? found.map(c => c.b).sort((x, y) => x - y)[found.length >> 1] : 0;
-  const same = c => c && Math.abs(c.b - mid) <= ends[0].h * 0.015;
-  const consistent = ends.length >= 2 && cands.filter(same).length >= Math.max(2, Math.ceil(ends.length * 0.6));
-  ends.forEach((seg, i) => {
-    const c = cands[i];
-    if (!c) return;
-    const typed = (seg.text || []).some(t => t.y1 >= c.a && t.y0 <= c.b);
-    if (!((consistent && same(c)) || typed)) return;
-    const cut = c.a - 2, bd = boundsAbove(seg, cut);
-    seg.footer = { cut, ...bd, empty: bd.top < 0 };
-  });
-}
-
 
 function readImage(file) {
   const url = URL.createObjectURL(file);
@@ -485,7 +461,7 @@ async function loadFiles(list) {
   setMode(pdfs.length ? 'pdf' : 'shots');
   try {
     if (pdfs.length) {
-      const out = [];
+      const out = []; removedLines = 0;
       for (const f of pdfs) { await loadPdf(f, out); await new Promise(r => setTimeout(r)); }
       if (!out.some(s => !s.empty)) { status('No writing was found in that file. Is the page blank in the export?'); return; }
       shots = null; $('cropcard').hidden = true;
@@ -700,9 +676,7 @@ $('mode').addEventListener('click', e => { const b = e.target.closest('button');
 
 /* ---------- joining pages into one strip ---------- */
 function buildLayout() {
-  // a segment as Pagefit should see it: without its footer when footers are removed
-  const view = s => opts.footer && s.footer ? { ...s, ...s.footer, h: s.footer.cut } : s;
-  const used = segments.map(view).filter(s => !(opts.trim && s.empty));
+  const used = segments.filter(s => !(opts.trim && s.empty));
   let L = 0, R = SRC_W;
   if (opts.trim) {
     L = Math.min(...used.map(s => s.left)); R = Math.max(...used.map(s => s.right)) + 1;
@@ -713,7 +687,7 @@ function buildLayout() {
     const y0 = opts.trim && s.trimTop ? Math.max(0, s.top - 4) : 0;
     const y1 = opts.trim && s.trimBottom ? Math.min(s.h, s.bottom + 5) : s.h;
     if (y1 <= y0) continue;
-    pieces.push({ seg: segments.find(o => o.canvas === s.canvas), y0, h: y1 - y0, off });
+    pieces.push({ seg: s, y0, h: y1 - y0, off });
     off += y1 - y0;
   }
   // ink per row of the joined strip, inside the used columns, ignoring ruled lines
@@ -887,13 +861,11 @@ function renderPreviews(keepPlace = true) {
   box.scrollTop = keepPlace ? scroll : 0;
   updatePageNo();
   const src = segments.filter(s => s.trimTop).length;
-  const footers = segments.filter(s => s.footer).length;
-  $('footerHint').textContent = shots || isSample ? 'The line OneNote adds at the bottom of each exported page.'
-    : footers ? `Found on ${footers} of ${src} ${src === 1 ? 'page' : 'pages'}.` : 'No footer found in this file.';
   const cuts = pages.filter((p, i) => p.cut && i < n - 1).length;
   const paper = opts.paper === 'a4' ? 'A4' : 'Letter';
   const from = shots ? `${shots.canvases.length} ${shots.canvases.length === 1 ? 'screenshot' : 'screenshots'}` : `${src} source ${src === 1 ? 'page' : 'pages'}`;
-  $('summary').textContent = `${from} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}`;
+  const removed = !shots && !isSample && removedLines ? ` · ${removedLines} header/footer ${removedLines === 1 ? 'line' : 'lines'} removed` : '';
+  $('summary').textContent = `${from} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}${removed}`;
   const clipped = [...new Set(segments.filter(s => s.clipped).map(s => s.src))];
   const note = $('note');
   note.classList.toggle('warn', clipped.length > 0);
@@ -1105,7 +1077,6 @@ seg('paper', 'paper'); seg('orient', 'orient');
 $('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; rebuild(false); });
 $('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; rebuild(false); });
 $('trim').addEventListener('change', e => { opts.trim = e.target.checked; rebuild(true); });
-$('footer').addEventListener('change', e => { opts.footer = e.target.checked; rebuild(true); });
 $('file').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
 $('save').addEventListener('click', savePdf);
 const drop = $('drop');
