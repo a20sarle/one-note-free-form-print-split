@@ -339,7 +339,8 @@ function analyze(canvas, trimTop = true, trimBottom = true) {
     bottom = y;
   }
   for (let x = 0; x < w; x++) if (!ruledCol[x] && colCnt[x] > NOISE) { if (x < left) left = x; right = x; }
-  return { canvas, w, h, mask, ruledRow, ruledCol, top, bottom, left, right, trimTop, trimBottom, empty: top < 0,
+  for (let y = 0; y < h; y++) if (ruledRow[y]) rowCnt[y] = 0;
+  return { canvas, w, h, mask, ruledRow, ruledCol, rowCnt, top, bottom, left, right, trimTop, trimBottom, empty: top < 0,
     clipped: right > 0.6 * w && hardRightEdge(mask, w, h, ruledRow, ruledCol, right) };
 }
 
@@ -367,6 +368,7 @@ function hardRightEdge(mask, w, h, ruledRow, ruledCol, right) {
 async function loadPdf(file, out) {
   if (!window.pdfjsLib) throw new Error('The PDF reader did not load. Check your connection and reload the page.');
   const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const rendered = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     status(`Reading ${file.name}: page ${n} of ${pdf.numPages}`);
     const page = await pdf.getPage(n);
@@ -375,16 +377,104 @@ async function loadPdf(file, out) {
     const printed = await printedLines(page, vp);
     removedLines += printed.length;
     const boxes = printed.flatMap(l => l.boxes);
+    const chunks = [];
     for (let off = 0; off < H; off += CHUNK_H) {
       const c = document.createElement('canvas');
       c.width = W; c.height = Math.min(CHUNK_H, H - off);
-      const ctx = c.getContext('2d');
+      const ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       if (boxes.length) skipTextIn(ctx, boxes.map(b => ({ ...b, y0: b.y0 - off, y1: b.y1 - off })));
       // 'print' intent renders without waiting for animation frames, so it keeps going in a background tab
       await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, 0, -off], intent: 'print' }).promise;
-      out.push(Object.assign(analyze(c, off === 0, off + CHUNK_H >= H), { src: `page ${n}` }));
+      chunks.push(c);
     }
+    // pages that fit in one canvas are also checked for typed text the printer turned into shapes
+    const typed = H <= CHUNK_H ? await typedMarginLines(page, vp, W, H, boxes) : [];
+    rendered.push({ n, page, vp, W, H, chunks, typed });
+  }
+  await removeRepeatedTyped(rendered);
+  for (const r of rendered) {
+    r.chunks.forEach((c, i) => out.push(Object.assign(analyze(c, i === 0, i === r.chunks.length - 1), { src: `page ${r.n}` })));
+  }
+}
+
+/* ---------- headers and footers turned into shapes ---------- */
+// Some printers ("Microsoft Print to PDF", for one) turn every letter into a filled outline,
+// so the PDF has no text to read. Pen strokes stay lines, though, so drawing a page with
+// only its filled shapes shows exactly the typed text. A typed line in the top or bottom
+// margin that comes back at the same height on most pages is a header or footer; typed
+// text that belongs to the note, like a page title, appears on one page only and stays.
+const MARGIN_BAND = 0.06;   // top and bottom 6% of the page
+
+async function renderLayer(page, vp, W, H, onlyFills, boxes = []) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const skip = () => {};
+  if (boxes.length) skipTextIn(ctx, boxes);   // lines already left out as text
+  if (onlyFills) { ctx.stroke = skip; ctx.strokeText = skip; ctx.drawImage = skip; }
+  else { ctx.fill = skip; ctx.fillText = skip; }
+  await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
+  return c;
+}
+
+async function typedMarginLines(page, vp, W, H, boxes) {
+  const c = await renderLayer(page, vp, W, H, true, boxes);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const band = Math.round(H * MARGIN_BAND), lines = [];
+  for (const y0 of [0, H - band]) {
+    const d = ctx.getImageData(0, y0, W, band).data;
+    const mask = new Uint8Array(W * band);
+    const rowInk = new Uint32Array(band);
+    for (let i = 0, p = 0; i < mask.length; i++, p += 4) {
+      if (0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2] < INK_LUM) { mask[i] = 1; rowInk[(i / W) | 0]++; }
+    }
+    // rows with typed ink, grouped into lines (small gaps inside a line are allowed)
+    let cur = null;
+    for (let r = 0; r < band; r++) {
+      if (!rowInk[r]) continue;
+      if (cur && r - cur.b <= 3) cur.b = r;
+      else { cur = { a: r, b: r, y0, mask }; lines.push(cur); }
+    }
+  }
+  c.width = c.height = 0;
+  return lines.map(l => ({ ...l, mid: (l.y0 + (l.a + l.b) / 2) / H }));
+}
+
+async function removeRepeatedTyped(rendered) {
+  const pages = rendered.filter(r => r.typed.length);
+  if (pages.length < 2) return;
+  const need = Math.max(2, Math.ceil(rendered.length * 0.6));
+  for (const r of pages) {
+    const repeated = r.typed.filter(l =>
+      rendered.filter(o => o.typed.some(m => Math.abs(m.mid - l.mid) <= 0.006)).length >= need);
+    if (!repeated.length) continue;
+    status(`Removing headers and footers: page ${r.n}`);
+    removedLines += repeated.length;
+    // put back what lies under the letters: the same page drawn without filled shapes
+    const under = await renderLayer(r.page, r.vp, r.W, r.H, false);
+    const main = r.chunks[0], mctx = main.getContext('2d', { willReadFrequently: true });
+    const uctx = under.getContext('2d', { willReadFrequently: true });
+    for (const l of repeated) {
+      const top = Math.max(0, l.y0 + l.a - 2), h = Math.min(r.H, l.y0 + l.b + 3) - top;
+      const md = mctx.getImageData(0, top, r.W, h), ud = uctx.getImageData(0, top, r.W, h).data;
+      for (let y = 0; y < h; y++) {
+        const by = top + y - l.y0;
+        for (let x = 0; x < r.W; x++) {
+          // the letter's pixel or one next to it (smoothed edges)
+          let hit = false;
+          for (let dy = -1; dy <= 1 && !hit; dy++) {
+            const yy = by + dy; if (yy < l.a || yy > l.b) continue;
+            for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx >= 0 && xx < r.W && l.mask[yy * r.W + xx]) { hit = true; break; } }
+          }
+          if (!hit) continue;
+          const p = (y * r.W + x) * 4;
+          md.data[p] = ud[p]; md.data[p + 1] = ud[p + 1]; md.data[p + 2] = ud[p + 2]; md.data[p + 3] = 255;
+        }
+      }
+      mctx.putImageData(md, 0, top);
+    }
+    under.width = under.height = 0;
   }
 }
 
@@ -699,14 +789,24 @@ function buildLayout() {
     L = Math.min(...used.map(s => s.left)); R = Math.max(...used.map(s => s.right)) + 1;
     const pad = 14; L = Math.max(0, L - pad); R = Math.min(SRC_W, R + pad);
   }
+  // A line sliced in two by a page end stops in a straight edge on both pages. Those
+  // halves are joined with no gap; everything else keeps a little space around it.
+  const cutEdge = (s, y, step) => {
+    let most = 0;
+    for (let k = 0; k < 25; k++) { const yy = y + k * step; if (yy < 0 || yy >= s.h) break; most = Math.max(most, s.rowCnt[yy]); }
+    const edge = Math.max(s.rowCnt[y], s.rowCnt[y + step] || 0);   // the very last row can be a faint smoothed edge
+    return edge > NOISE && edge >= 0.3 * most;
+  };
+  const sliced = used.map((s, i) => i + 1 < used.length && !s.empty && !used[i + 1].empty
+    && cutEdge(s, s.bottom, -1) && cutEdge(used[i + 1], used[i + 1].top, 1));
   const pieces = []; let off = 0;
-  for (const s of used) {
-    const y0 = opts.trim && s.trimTop ? Math.max(0, s.top - 4) : 0;
-    const y1 = opts.trim && s.trimBottom ? Math.min(s.h, s.bottom + 5) : s.h;
-    if (y1 <= y0) continue;
+  used.forEach((s, i) => {
+    const y0 = opts.trim && s.trimTop ? Math.max(0, s.top - (i && sliced[i - 1] ? 0 : 4)) : 0;
+    const y1 = opts.trim && s.trimBottom ? Math.min(s.h, s.bottom + (sliced[i] ? 1 : 5)) : s.h;
+    if (y1 <= y0) return;
     pieces.push({ seg: s, y0, h: y1 - y0, off });
     off += y1 - y0;
-  }
+  });
   // ink per row of the joined strip, inside the used columns, ignoring ruled lines
   const rowInk = new Uint32Array(off);
   for (const p of pieces) {
