@@ -99,11 +99,17 @@ button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px sol
 .summary { font: .8rem var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: .9rem; color: var(--muted); }
 .note b { color: var(--fg); font-weight: 600; }
-.sheets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 22px 18px; }
-.sheet { display: grid; gap: 8px; }
-.sheet canvas { width: 100%; height: auto; background: var(--paper); box-shadow: var(--shadow); border-radius: 2px; display: block; }
-.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .84rem; }
-.meta .num { font: 500 .78rem var(--f-mono); color: var(--muted); margin-right: auto; }
+.viewer { display: grid; gap: 10px; min-width: 0; }
+.viewbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.navbtn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.navbtn:disabled { opacity: .4; cursor: default; }
+.pageno { font: 500 .9rem var(--f-mono); min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; }
+.viewhint { margin-left: auto; font-size: .82rem; color: var(--muted); }
+/* one sheet fills the window; scrolling snaps from sheet to sheet like a PDF reader */
+.sheets { height: min(calc(100dvh - 150px), 1150px); min-height: 380px; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; display: grid; gap: 24px; justify-items: center; padding-block: 12px; border-radius: 8px; }
+.sheet { scroll-snap-align: center; display: flex; justify-content: center; }
+.sheet canvas { width: 100%; height: 100%; background: var(--paper); box-shadow: var(--shadow); border-radius: 2px; display: block; }
+.paper .chip { position: absolute; top: 10px; left: 10px; pointer-events: none; }
 .chip { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
 .paper { position: relative; cursor: pointer; }
@@ -181,7 +187,6 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
         <input type="range" id="margin" min="5" max="25" step="1" value="12">
       </div>
       <label class="check"><input type="checkbox" id="trim" checked><span>Remove empty space<small>Crops blank edges so the writing fills the page width.</small></span></label>
-      <label class="check"><input type="checkbox" id="nums" checked><span>Page numbers</span></label>
 
       <button class="btn" id="save" type="button">Download PDF</button>
       <p class="privacy">Your notes stay on this device. Files are read in the browser and never uploaded.</p>
@@ -204,7 +209,15 @@ kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: v
           <div class="cropbox" id="cropbox"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
         </div>
       </div>
-      <div class="sheets" id="sheets"></div>
+      <div class="viewer">
+        <div class="viewbar">
+          <button type="button" class="navbtn" id="prev" aria-label="Previous sheet">&#8249;</button>
+          <span class="pageno" id="pageno" aria-live="polite"></span>
+          <button type="button" class="navbtn" id="next" aria-label="Next sheet">&#8250;</button>
+          <span class="viewhint">Scroll for the next sheet · click a sheet to add space</span>
+        </div>
+        <div class="sheets" id="sheets" tabindex="0" aria-label="Sheets"></div>
+      </div>
     </div>
   </section>
 
@@ -288,7 +301,7 @@ const MIN_GAP = 6;           // rows of blank space needed for a clean break
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 const $ = id => document.getElementById(id);
-const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true, nums: true };
+const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true };
 let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
 let layout = null, geom = null, pages = [], spaces = [];   // spaces: { y: row of the joined note, pt: height }
 let mode = 'pdf', shots = null;   // shots: { canvases, crop (fractions of the screenshot), auto, joins }
@@ -638,10 +651,10 @@ function buildLayout() {
 function buildGeom() {
   let [pw, ph] = PAPER[opts.paper];
   if (opts.orient === 'l') [pw, ph] = [ph, pw];
-  const m = opts.margin * MM, footer = opts.nums ? 16 : 0;
-  const cw = pw - 2 * m, ch = ph - 2 * m - footer;
+  const m = opts.margin * MM;
+  const cw = pw - 2 * m, ch = ph - 2 * m;
   const drawnW = cw * opts.size, s = drawnW / layout.stripW;   // points per strip pixel
-  return { pw, ph, m, cw, ch, drawnW, s, footer, Hpx: Math.floor(ch / s) };
+  return { pw, ph, m, cw, ch, drawnW, s, Hpx: Math.floor(ch / s) };
 }
 
 /* ---------- finding page breaks ---------- */
@@ -721,7 +734,7 @@ function snapToGap(row, pg) {
 }
 
 /* ---------- drawing sheets ---------- */
-function renderPage(pg, idx, total, targetW, preview = false) {
+function renderPage(pg, targetW, preview = false) {
   const g = geom, k = targetW / g.pw;
   const c = document.createElement('canvas');
   c.width = Math.round(g.pw * k); c.height = Math.round(g.ph * k);
@@ -750,36 +763,46 @@ function renderPage(pg, idx, total, targetW, preview = false) {
         x0, top + (a - it.a) * f, layout.stripW * f, (b - a) * f);
     }
   }
-  if (opts.nums) {
-    ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
-    ctx.font = `${8.5 * k}px "Source Sans 3", sans-serif`;
-    ctx.fillText(`${idx + 1} / ${total}`, c.width / 2, (g.ph - g.m - 2) * k);
-  }
   return c;
 }
 
-function renderPreviews() {
-  const box = $('sheets'); box.textContent = '';
-  const n = pages.length;
+// Largest sheet size that fits the viewer, in CSS pixels
+function sheetSize() {
+  const box = $('sheets');
+  const h = box.clientHeight - 24, w = box.clientWidth - 8;
+  const fit = Math.max(200, Math.min(w, h * geom.pw / geom.ph));
+  return { w: Math.round(fit), h: Math.round(fit * geom.ph / geom.pw) };
+}
+
+function sizeSheets() {
+  const { w, h } = sheetSize();
+  for (const p of document.querySelectorAll('.sheets .paper')) { p.style.width = w + 'px'; p.style.height = h + 'px'; }
+}
+
+function renderPreviews(keepPlace = true) {
+  const box = $('sheets'), scroll = box.scrollTop;
+  box.textContent = '';
+  const n = pages.length, size = sheetSize();
+  const px = Math.min(1600, Math.max(700, Math.round(size.w * (window.devicePixelRatio || 1))));
   pages.forEach((pg, i) => {
     const el = document.createElement('div'); el.className = 'sheet';
-    const c = renderPage(pg, i, n, 460, true);
+    const c = renderPage(pg, px, true);
     c.setAttribute('role', 'img'); c.setAttribute('aria-label', `Sheet ${i + 1} of ${n}. Click where you want extra space.`);
     const paper = document.createElement('div'); paper.className = 'paper';
+    paper.style.width = size.w + 'px'; paper.style.height = size.h + 'px';
     const line = document.createElement('div'); line.className = 'guide-line'; line.hidden = true;
     line.innerHTML = '<span>Add space</span>';
     paper.append(c, line);
-    wireSheet(paper, c, line, pg);
-    const meta = document.createElement('div'); meta.className = 'meta';
-    const num = document.createElement('span'); num.className = 'num'; num.textContent = `Sheet ${i + 1}`;
-    meta.append(num);
     if (pg.cut && i < n - 1) {
       const chip = document.createElement('span'); chip.className = 'chip warn'; chip.textContent = 'Break cuts writing';
-      meta.append(chip);
+      paper.append(chip);
     }
-    el.append(paper, meta);
+    wireSheet(paper, c, line, pg);
+    el.append(paper);
     box.append(el);
   });
+  box.scrollTop = keepPlace ? scroll : 0;
+  updatePageNo();
   const src = segments.filter(s => s.trimTop).length;
   const cuts = pages.filter((p, i) => p.cut && i < n - 1).length;
   const paper = opts.paper === 'a4' ? 'A4' : 'Letter';
@@ -801,7 +824,7 @@ function renderPreviews() {
 function rebuild(resetLayout) {
   if (resetLayout || !layout) { layout = buildLayout(); spaces = []; closePop(); }
   geom = buildGeom();
-  paginate(); renderPreviews();
+  paginate(); renderPreviews(!resetLayout);
 }
 
 /* ---------- adding space by clicking a sheet ---------- */
@@ -868,6 +891,32 @@ function wireSheet(paper, c, line, pg) {
 document.addEventListener('click', closePop);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
 
+/* ---------- sheet viewer ---------- */
+function currentSheet() {
+  const box = $('sheets'), mid = box.scrollTop + box.clientHeight / 2;
+  const sheets = [...box.children];
+  let best = 0;
+  sheets.forEach((el, i) => { if (el.offsetTop - box.offsetTop <= mid) best = i; });
+  return best;
+}
+function updatePageNo() {
+  const n = pages.length, i = Math.min(currentSheet(), n - 1);
+  $('pageno').textContent = `${i + 1} / ${n}`;
+  $('prev').disabled = i <= 0; $('next').disabled = i >= n - 1;
+}
+function goTo(i) {
+  const box = $('sheets'), el = box.children[i];
+  if (!el) return;
+  const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // scrollIntoView respects the sheet snapping; a smooth scrollTo can get stuck against it
+  el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+}
+$('prev').addEventListener('click', () => goTo(currentSheet() - 1));
+$('next').addEventListener('click', () => goTo(currentSheet() + 1));
+$('sheets').addEventListener('scroll', () => { closePop(); updatePageNo(); }, { passive: true });
+let resizeTimer = 0;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (geom) { sizeSheets(); updatePageNo(); } }, 120); });
+
 /* ---------- export ---------- */
 async function savePdf() {
   if (!window.jspdf) { status('The PDF writer did not load. Check your connection and reload the page.'); return; }
@@ -880,7 +929,7 @@ async function savePdf() {
       status(`Writing sheet ${i + 1} of ${pages.length}`);
       await new Promise(r => setTimeout(r));
       if (i) doc.addPage([g.pw, g.ph], g.pw > g.ph ? 'l' : 'p');
-      const c = renderPage(pages[i], i, pages.length, targetW);
+      const c = renderPage(pages[i], targetW);
       doc.addImage(c.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, g.pw, g.ph, undefined, 'FAST');
       c.width = c.height = 0;
     }
@@ -970,7 +1019,6 @@ seg('paper', 'paper'); seg('orient', 'orient');
 $('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; rebuild(false); });
 $('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; rebuild(false); });
 $('trim').addEventListener('change', e => { opts.trim = e.target.checked; rebuild(true); });
-$('nums').addEventListener('change', e => { opts.nums = e.target.checked; rebuild(false); });
 $('file').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
 $('save').addEventListener('click', savePdf);
 const drop = $('drop');
