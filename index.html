@@ -1,0 +1,615 @@
+<title>Pagefit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@500&display=swap">
+<style>
+/* Layout: tool bar of settings on the left, a desk of A4 sheets on the right; export guide below. */
+:root {
+  --bg: #F4F6F9;
+  --surface: #FFFFFF;
+  --fg: #1A2132;
+  --muted: #5B6578;
+  --line: #DCE1EA;
+  --accent: #2443B0;       /* fountain-pen blue */
+  --accent-fg: #FFFFFF;
+  --accent-soft: #E7ECFB;
+  --warn: #A9500B;
+  --warn-soft: #FCEFE2;
+  --ok: #1F7A4D;
+  --desk: #E8ECF2;
+  --paper: #FFFFFF;
+  --shadow: 0 1px 2px rgba(20,30,60,.08), 0 6px 18px rgba(20,30,60,.08);
+  --f-display: "Schibsted Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F131B; --surface: #171C26; --fg: #E6E9F0; --muted: #9AA3B6; --line: #2A3141;
+    --accent: #8FA6FF; --accent-fg: #0F131B; --accent-soft: #1E2847; --warn: #F2A65E; --warn-soft: #3A2716;
+    --ok: #6FD3A0; --desk: #0B0E14; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F131B; --surface: #171C26; --fg: #E6E9F0; --muted: #9AA3B6; --line: #2A3141;
+  --accent: #8FA6FF; --accent-fg: #0F131B; --accent-soft: #1E2847; --warn: #F2A65E; --warn-soft: #3A2716;
+  --ok: #6FD3A0; --desk: #0B0E14; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+header { display: grid; gap: 6px; }
+header h1 { font-size: 1.9rem; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 10px; }
+header h1 small { font: 500 .78rem var(--f-mono); color: var(--muted); letter-spacing: .02em; }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+
+.app { display: grid; grid-template-columns: 300px minmax(0,1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0,1fr); } }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 18px; }
+@media (min-width: 861px) { .panel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+
+.drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px 14px; text-align: center; display: grid; gap: 8px; cursor: pointer; transition: border-color .15s, background .15s; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop strong { font-family: var(--f-display); font-weight: 500; }
+.drop span { color: var(--muted); font-size: .88rem; }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.field { display: grid; gap: 8px; }
+.label { font: 500 .72rem var(--f-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; justify-content: space-between; }
+.label output { color: var(--fg); text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; }
+.seg button { font: 600 .9rem var(--f-body); border: 0; background: transparent; color: var(--muted); padding: 6px 4px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: .95rem; }
+.check input { accent-color: var(--accent); width: 17px; height: 17px; margin-top: 3px; flex: none; }
+.check small { display: block; color: var(--muted); font-size: .84rem; }
+
+.btn { font: 600 1rem var(--f-body); border: 0; border-radius: 8px; padding: 11px 14px; cursor: pointer; background: var(--accent); color: var(--accent-fg); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); padding: 5px 9px; font-size: .82rem; border-radius: 6px; }
+.btn-ghost:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, .drop:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { font-size: .88rem; color: var(--muted); min-height: 1.3em; margin: -8px 0 0; }
+.privacy { font-size: .82rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; margin: 0; }
+
+.desk { background: var(--desk); border-radius: 12px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.deskbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.deskbar h2 { font-size: 1.1rem; font-weight: 500; }
+.summary { font: .8rem var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font-size: .9rem; color: var(--muted); }
+.note b { color: var(--fg); font-weight: 600; }
+.sheets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 22px 18px; }
+.sheet { display: grid; gap: 8px; }
+.sheet canvas { width: 100%; height: auto; background: var(--paper); box-shadow: var(--shadow); border-radius: 2px; display: block; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .84rem; }
+.meta .num { font: 500 .78rem var(--f-mono); color: var(--muted); margin-right: auto; }
+.chip { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { color: var(--ok); padding-inline: 0; }
+.nudges { display: flex; gap: 6px; width: 100%; }
+.nudges .btn-ghost { flex: 1; }
+
+.guide { display: grid; gap: 16px; }
+.guide > h2 { font-size: 1.35rem; }
+.guide > p { margin: 0; color: var(--muted); max-width: 70ch; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { font: 600 .95rem var(--f-body); background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabpanel { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 24px; }
+@media (max-width: 760px) { .tabpanel { grid-template-columns: minmax(0,1fr); } }
+.tabpanel ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.tabpanel ol li::marker { font: 500 .85rem var(--f-mono); color: var(--accent); }
+.tip { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: .94rem; display: grid; gap: 6px; align-content: start; }
+.tip h3 { font-size: .95rem; font-weight: 700; }
+.tip p { margin: 0; color: var(--muted); }
+kbd, .path { font: .84em var(--f-mono); background: var(--accent-soft); color: var(--fg); padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Pagefit <small>OneNote → A4</small></h1>
+    <p>OneNote pages are an endless canvas. When you print or export them, handwriting gets sliced through the middle of a line or cut off at the edge. Pagefit takes the PDF (or screenshots), finds the blank space between your lines, and lays everything out on clean A4 sheets.</p>
+  </header>
+
+  <section class="app">
+    <aside class="panel" aria-label="Settings">
+      <label class="drop" id="drop">
+        <strong>Choose your OneNote PDF</strong>
+        <span>or drop it here · screenshots work too</span>
+        <input type="file" id="file" accept="application/pdf,image/*" multiple>
+      </label>
+      <p class="status" id="status" role="status"></p>
+
+      <div class="field">
+        <div class="label">Paper</div>
+        <div class="seg" id="paper">
+          <button type="button" data-v="a4" aria-pressed="true">A4</button>
+          <button type="button" data-v="letter" aria-pressed="false">Letter</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="label">Orientation</div>
+        <div class="seg" id="orient">
+          <button type="button" data-v="p" aria-pressed="true">Portrait</button>
+          <button type="button" data-v="l" aria-pressed="false">Landscape</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="label" for="size">Writing size <output id="sizeOut">100%</output></label>
+        <input type="range" id="size" min="50" max="100" step="5" value="100">
+      </div>
+      <div class="field">
+        <label class="label" for="margin">Margins <output id="marginOut">12 mm</output></label>
+        <input type="range" id="margin" min="5" max="25" step="1" value="12">
+      </div>
+      <label class="check"><input type="checkbox" id="trim" checked><span>Remove empty space<small>Crops blank edges so the writing fills the page width.</small></span></label>
+      <label class="check"><input type="checkbox" id="nums" checked><span>Page numbers</span></label>
+
+      <button class="btn" id="save" type="button">Download PDF</button>
+      <p class="privacy">Your notes stay on this device. Files are read in the browser and never uploaded.</p>
+    </aside>
+
+    <div class="desk">
+      <div class="deskbar">
+        <h2 id="deskTitle">Sample: Thermodynamics, lecture 4</h2>
+        <span class="summary" id="summary"></span>
+      </div>
+      <div class="note" id="note"></div>
+      <div class="sheets" id="sheets"></div>
+    </div>
+  </section>
+
+  <section class="guide">
+    <h2>Getting your notes out of OneNote</h2>
+    <p>Pagefit can only rearrange what is in the file, so make sure nothing is cut off when you export. A small, complete export is better than a large one with missing edges: Pagefit enlarges it again.</p>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="t-ipad" aria-selected="true" aria-controls="p-ipad">iPad</button>
+      <button type="button" role="tab" id="t-mac" aria-selected="false" aria-controls="p-mac">Mac</button>
+      <button type="button" role="tab" id="t-web" aria-selected="false" aria-controls="p-web">OneNote on the web</button>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="p-ipad" aria-labelledby="t-ipad">
+      <ol>
+        <li>Open the page in OneNote.</li>
+        <li>Tap <span class="path">Share</span> (or <span class="path">…</span>) and send a copy of the page as a PDF. Save it to Files.</li>
+        <li>Open Pagefit in Safari, tap <b>Choose your OneNote PDF</b> and pick the file.</li>
+        <li>Check the sheets, then tap <b>Download PDF</b> and print that file.</li>
+      </ol>
+      <div class="tip">
+        <h3>Writing missing on the right?</h3>
+        <p>Then OneNote cut it off during export. Zoom out in OneNote until the whole page fits on screen, take a screenshot (top button + volume up) and give Pagefit the screenshot instead. For a long page, take several screenshots that don't overlap; Pagefit joins them in file-name order.</p>
+      </div>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden>
+      <ol>
+        <li>Open the page in OneNote and choose <span class="path">File → Print</span>.</li>
+        <li>Click <span class="path">Show Details</span> and set <span class="path">Scale</span> to about 60% so the whole width fits. Pagefit enlarges it again.</li>
+        <li>Open the <span class="path">PDF</span> menu at the bottom and choose <span class="path">Save as PDF</span>.</li>
+        <li>Drop that PDF onto Pagefit, check the sheets and download.</li>
+      </ol>
+      <div class="tip">
+        <h3>Screenshots work too</h3>
+        <p>Press <kbd>⇧⌘4</kbd>, drag around the note, then paste it here with <kbd>⌘V</kbd>. Handy for a single page or a board drawing.</p>
+      </div>
+    </div>
+    <div class="tabpanel" role="tabpanel" id="p-web" aria-labelledby="t-web" hidden>
+      <ol>
+        <li>Open the notebook at onenote.com in Safari, Chrome or Edge.</li>
+        <li>Open the page and choose <span class="path">Print</span> from OneNote's menu.</li>
+        <li>Pick <span class="path">Save as PDF</span> as the printer and reduce the scale if the right edge is cut.</li>
+        <li>Give the PDF to Pagefit.</li>
+      </ol>
+      <div class="tip">
+        <h3>Why the cuts happen</h3>
+        <p>OneNote slices the canvas at fixed heights without looking at what is there. Pagefit measures every row of pixels and moves each page break into a gap between lines. If a break still lands on writing, the sheet is flagged and you can move the break with <b>Earlier</b> or <b>Later</b>.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(() => {
+const PAPER = { a4: [595.28, 841.89], letter: [612, 792] };
+const MM = 72 / 25.4;
+const SRC_W = 1400;          // every source page is rendered to this width
+const CHUNK_H = 4000;        // tall pages are split into chunks to stay under canvas limits
+const INK_LUM = 200;         // darker than this counts as writing (light rules and highlighter don't)
+const NOISE = 2;             // ink pixels per row still treated as blank (specks)
+const MIN_GAP = 6;           // rows of blank space needed for a clean break
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const $ = id => document.getElementById(id);
+const opts = { paper: 'a4', orient: 'p', size: 1, margin: 12, trim: true, nums: true };
+let segments = [], docName = 'Thermodynamics lecture 4', isSample = true;
+let layout = null, geom = null, pages = [], manualEnds = [];
+
+let downloads = null;
+(async () => { try { if (window.claude && window.claude.use) downloads = await window.claude.use('downloads'); } catch (e) {} })();
+
+const status = t => { $('status').textContent = t || ''; };
+
+/* ---------- reading pixels ---------- */
+function analyze(canvas, trimTop = true, trimBottom = true) {
+  const w = canvas.width, h = canvas.height;
+  const d = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  const mask = new Uint8Array(w * h);
+  const rowCnt = new Uint32Array(h);
+  for (let y = 0, i = 0, p = 0; y < h; y++) {
+    let c = 0;
+    for (let x = 0; x < w; x++, i++, p += 4) {
+      if (d[p + 3] > 40 && 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2] < INK_LUM) { mask[i] = 1; c++; }
+    }
+    rowCnt[y] = c;
+  }
+  // full-width lines (ruled paper) and full-height lines are background, not writing
+  const ruledRow = new Uint8Array(h);
+  let real = 0;
+  for (let y = 0; y < h; y++) { if (rowCnt[y] > 0.6 * w) ruledRow[y] = 1; else real++; }
+  const colCnt = new Uint32Array(w);
+  for (let y = 0; y < h; y++) if (!ruledRow[y]) { const o = y * w; for (let x = 0; x < w; x++) colCnt[x] += mask[o + x]; }
+  const ruledCol = new Uint8Array(w);
+  for (let x = 0; x < w; x++) if (real && colCnt[x] > 0.6 * real) ruledCol[x] = 1;
+  let top = -1, bottom = -1, left = w, right = -1;
+  for (let y = 0; y < h; y++) {
+    if (ruledRow[y] || rowCnt[y] <= NOISE) continue;
+    if (top < 0) top = y;
+    bottom = y;
+  }
+  for (let x = 0; x < w; x++) if (!ruledCol[x] && colCnt[x] > NOISE) { if (x < left) left = x; right = x; }
+  return { canvas, w, h, mask, ruledRow, ruledCol, top, bottom, left, right, trimTop, trimBottom, empty: top < 0 };
+}
+
+async function loadPdf(file, out) {
+  if (!window.pdfjsLib) throw new Error('The PDF reader did not load. Check your connection and reload the page.');
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    status(`Reading ${file.name}: page ${n} of ${pdf.numPages}`);
+    const page = await pdf.getPage(n);
+    const vp = page.getViewport({ scale: SRC_W / page.getViewport({ scale: 1 }).width });
+    const W = Math.round(vp.width), H = Math.round(vp.height);
+    for (let off = 0; off < H; off += CHUNK_H) {
+      const c = document.createElement('canvas');
+      c.width = W; c.height = Math.min(CHUNK_H, H - off);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, 0, -off] }).promise;
+      out.push(analyze(c, off === 0, off + CHUNK_H >= H));
+    }
+  }
+}
+
+async function loadImage(file, out) {
+  status(`Reading ${file.name}`);
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(`${file.name} is not an image Pagefit can read.`)); i.src = url; });
+    const k = SRC_W / img.naturalWidth, H = Math.round(img.naturalHeight * k);
+    for (let off = 0; off < H; off += CHUNK_H) {
+      const c = document.createElement('canvas');
+      c.width = SRC_W; c.height = Math.min(CHUNK_H, H - off);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, -off, SRC_W, H);
+      out.push(analyze(c, off === 0, off + CHUNK_H >= H));
+    }
+  } finally { URL.revokeObjectURL(url); }
+}
+
+async function loadFiles(list) {
+  const files = [...list].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || f.type.startsWith('image/'));
+  if (!files.length) { status('Choose a PDF or an image (PNG, JPG, HEIC screenshots exported as JPG).'); return; }
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const out = [];
+  try {
+    for (const f of files) {
+      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) await loadPdf(f, out); else await loadImage(f, out);
+      await new Promise(r => setTimeout(r));
+    }
+  } catch (e) { status(e.message || 'That file could not be read.'); return; }
+  if (!out.some(s => !s.empty)) { status('No writing was found in that file. Is the page blank in the export?'); return; }
+  segments = out; isSample = false; manualEnds = [];
+  docName = files[0].name.replace(/\.[^.]+$/, '') || 'notes';
+  $('deskTitle').textContent = files.length > 1 ? `${docName} + ${files.length - 1} more` : docName;
+  status('');
+  rebuild(true);
+}
+
+/* ---------- joining pages into one strip ---------- */
+function buildLayout() {
+  const used = segments.filter(s => !(opts.trim && s.empty));
+  let L = 0, R = SRC_W;
+  if (opts.trim) {
+    L = Math.min(...used.map(s => s.left)); R = Math.max(...used.map(s => s.right)) + 1;
+    const pad = 14; L = Math.max(0, L - pad); R = Math.min(SRC_W, R + pad);
+  }
+  const pieces = []; let off = 0;
+  for (const s of used) {
+    const y0 = opts.trim && s.trimTop ? Math.max(0, s.top - 4) : 0;
+    const y1 = opts.trim && s.trimBottom ? Math.min(s.h, s.bottom + 5) : s.h;
+    if (y1 <= y0) continue;
+    pieces.push({ seg: s, y0, h: y1 - y0, off });
+    off += y1 - y0;
+  }
+  // ink per row of the joined strip, inside the used columns, ignoring ruled lines
+  const rowInk = new Uint32Array(off);
+  for (const p of pieces) {
+    const { mask, w, ruledRow, ruledCol } = p.seg;
+    for (let r = 0; r < p.h; r++) {
+      const y = p.y0 + r;
+      if (ruledRow[y]) continue;
+      let c = 0; const o = y * w;
+      for (let x = L; x < R; x++) if (mask[o + x] && !ruledCol[x]) c++;
+      rowInk[p.off + r] = c;
+    }
+  }
+  return { L, R, stripW: R - L, pieces, totalH: off, rowInk };
+}
+
+function buildGeom() {
+  let [pw, ph] = PAPER[opts.paper];
+  if (opts.orient === 'l') [pw, ph] = [ph, pw];
+  const m = opts.margin * MM, footer = opts.nums ? 16 : 0;
+  const cw = pw - 2 * m, ch = ph - 2 * m - footer;
+  const drawnW = cw * opts.size, s = drawnW / layout.stripW;   // points per strip pixel
+  return { pw, ph, m, cw, ch, drawnW, s, footer, Hpx: Math.floor(ch / s) };
+}
+
+/* ---------- finding page breaks ---------- */
+const blank = r => layout.rowInk[r] <= NOISE;
+
+function findBreak(y, lim) {
+  const lo = Math.floor(y + 0.55 * geom.Hpx);
+  let fallback = -1;
+  for (let r = lim - 1; r >= lo; r--) {
+    if (!blank(r)) continue;
+    let a = r; while (a - 1 >= lo && blank(a - 1)) a--;
+    if (r - a + 1 >= MIN_GAP) return Math.floor((a + r + 1) / 2);
+    if (fallback < 0) fallback = Math.floor((a + r + 1) / 2);
+    r = a;
+  }
+  if (fallback > y) return fallback;
+  let best = lim, bestInk = Infinity;           // no gap at all: cut where there is least writing
+  for (let r = lim - 1; r >= lo; r--) if (layout.rowInk[r] < bestInk) { bestInk = layout.rowInk[r]; best = r; }
+  return best;
+}
+
+function paginate() {
+  const { totalH } = layout; const H = geom.Hpx;
+  pages = []; let y = 0;
+  while (y < totalH && pages.length < 400) {
+    while (y < totalH && blank(y)) y++;
+    if (y >= totalH) break;
+    const i = pages.length; let end;
+    const man = manualEnds[i];
+    if (man != null && man > y && man <= y + H) end = man;
+    else if (y + H >= totalH) end = totalH;
+    else end = findBreak(y, y + H);
+    if (end <= y) end = Math.min(totalH, y + H);
+    const cut = end < totalH && !blank(end) && !blank(end - 1);
+    pages.push({ y0: y, y1: end, cut });
+    y = end;
+  }
+}
+
+function gapAbove(from, lo) {
+  let r = from - 1;
+  while (r > lo && blank(r)) r--;
+  for (;;) {
+    while (r > lo && !blank(r)) r--;
+    if (r <= lo) return null;
+    const b = r; while (r > lo && blank(r)) r--;
+    if (b - r >= 4) return Math.floor((r + 1 + b + 1) / 2);
+  }
+}
+function gapBelow(from, hi) {
+  let r = from;
+  while (r < hi && blank(r)) r++;
+  for (;;) {
+    while (r < hi && !blank(r)) r++;
+    if (r >= hi) return null;
+    const a = r; while (r < hi && blank(r)) r++;
+    if (r - a >= 4 || r >= layout.totalH) return Math.min(hi, Math.floor((a + r) / 2));
+  }
+}
+function nudge(i, dir) {
+  const p = pages[i];
+  const next = dir < 0 ? gapAbove(p.y1, p.y0 + Math.floor(geom.Hpx * 0.1)) : gapBelow(p.y1, Math.min(layout.totalH, p.y0 + geom.Hpx));
+  if (next == null) { status(dir < 0 ? 'No earlier gap on this sheet.' : 'The next gap would not fit on this sheet.'); return; }
+  manualEnds = manualEnds.slice(0, i); manualEnds[i] = next;
+  status(''); paginate(); renderPreviews();
+}
+
+/* ---------- drawing sheets ---------- */
+function renderPage(pg, idx, total, targetW) {
+  const g = geom, k = targetW / g.pw;
+  const c = document.createElement('canvas');
+  c.width = Math.round(g.pw * k); c.height = Math.round(g.ph * k);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.imageSmoothingQuality = 'high';
+  const x0 = (g.m + (g.cw - g.drawnW) / 2) * k, yTop = g.m * k, f = g.s * k;
+  for (const p of layout.pieces) {
+    const a = Math.max(pg.y0, p.off), b = Math.min(pg.y1, p.off + p.h);
+    if (b <= a) continue;
+    ctx.drawImage(p.seg.canvas, layout.L, p.y0 + (a - p.off), layout.stripW, b - a,
+      x0, yTop + (a - pg.y0) * f, layout.stripW * f, (b - a) * f);
+  }
+  if (opts.nums) {
+    ctx.fillStyle = '#6B7280'; ctx.textAlign = 'center';
+    ctx.font = `${8.5 * k}px "Source Sans 3", sans-serif`;
+    ctx.fillText(`${idx + 1} / ${total}`, c.width / 2, (g.ph - g.m - 2) * k);
+  }
+  return c;
+}
+
+function renderPreviews() {
+  const box = $('sheets'); box.textContent = '';
+  const n = pages.length;
+  pages.forEach((pg, i) => {
+    const el = document.createElement('div'); el.className = 'sheet';
+    const c = renderPage(pg, i, n, 460);
+    c.setAttribute('role', 'img'); c.setAttribute('aria-label', `Sheet ${i + 1} of ${n}`);
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const num = document.createElement('span'); num.className = 'num'; num.textContent = `Sheet ${i + 1}`;
+    meta.append(num);
+    if (i < n - 1) {
+      const chip = document.createElement('span');
+      chip.className = pg.cut ? 'chip warn' : 'chip ok';
+      chip.textContent = pg.cut ? 'Break cuts writing' : 'Clean break';
+      meta.append(chip);
+      const ng = document.createElement('div'); ng.className = 'nudges';
+      const up = document.createElement('button'); up.type = 'button'; up.className = 'btn-ghost'; up.textContent = '↑ Earlier break';
+      up.onclick = () => nudge(i, -1);
+      const dn = document.createElement('button'); dn.type = 'button'; dn.className = 'btn-ghost'; dn.textContent = '↓ Later break';
+      dn.onclick = () => nudge(i, 1);
+      ng.append(up, dn); meta.append(ng);
+    }
+    el.append(c, meta); box.append(el);
+  });
+  const src = segments.filter(s => s.trimTop).length;
+  const cuts = pages.filter((p, i) => p.cut && i < n - 1).length;
+  const paper = opts.paper === 'a4' ? 'A4' : 'Letter';
+  $('summary').textContent = `${src} source ${src === 1 ? 'page' : 'pages'} → ${n} ${paper} ${n === 1 ? 'sheet' : 'sheets'}`;
+  $('note').innerHTML = isSample
+    ? '<b>This is a sample.</b> The original export split the line “W = ∫ p dV” across two pages. Pagefit joined it again and moved every break into a gap between lines. Choose your own PDF to replace the sample.'
+    : cuts ? `<b>${cuts} ${cuts === 1 ? 'break goes' : 'breaks go'} through writing</b> because there was no gap nearby. Use Earlier break on the flagged ${cuts === 1 ? 'sheet' : 'sheets'}, or lower the writing size.`
+    : '<b>Every break sits in a gap between lines.</b> Check the sheets, then download.';
+}
+
+function rebuild(resetLayout) {
+  if (resetLayout || !layout) layout = buildLayout();
+  geom = buildGeom();
+  paginate(); renderPreviews();
+}
+
+/* ---------- export ---------- */
+async function savePdf() {
+  if (!window.jspdf) { status('The PDF writer did not load. Check your connection and reload the page.'); return; }
+  const btn = $('save'); btn.disabled = true;
+  try {
+    const g = geom;
+    const doc = new window.jspdf.jsPDF({ unit: 'pt', format: [g.pw, g.ph], orientation: g.pw > g.ph ? 'l' : 'p', compress: true });
+    const targetW = Math.max(1100, Math.min(1800, g.pw / g.s));
+    for (let i = 0; i < pages.length; i++) {
+      status(`Writing sheet ${i + 1} of ${pages.length}`);
+      await new Promise(r => setTimeout(r));
+      if (i) doc.addPage([g.pw, g.ph], g.pw > g.ph ? 'l' : 'p');
+      const c = renderPage(pages[i], i, pages.length, targetW);
+      doc.addImage(c.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, g.pw, g.ph, undefined, 'FAST');
+      c.width = c.height = 0;
+    }
+    const blob = doc.output('blob');
+    const filename = `${docName} (${opts.paper === 'a4' ? 'A4' : 'Letter'}).pdf`;
+    if (downloads) {
+      try { await downloads.save({ filename, data: blob }); status(`Saved ${filename}`); }
+      catch (e) { status(e && e.code === 'declined' ? 'Download cancelled.' : 'This view cannot save files. Open the page in a browser and try again.'); }
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      status(`Saved ${filename}`);
+    }
+  } finally { btn.disabled = false; }
+}
+
+/* ---------- sample note ---------- */
+async function buildSample() {
+  try { await document.fonts.load('46px Caveat'); await document.fonts.load('600 40px "Source Sans 3"'); } catch (e) {}
+  const W = SRC_W, PH = 1980, H = PH * 2, RULE0 = 200, STEP = 64;
+  const big = document.createElement('canvas'); big.width = W; big.height = H;
+  const ctx = big.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#C9DBF2'; ctx.lineWidth = 2;
+  for (let y = RULE0 + 14; y < H; y += STEP) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.fillStyle = '#222'; ctx.font = '600 40px "Source Sans 3", sans-serif'; ctx.fillText('Thermodynamics · Lecture 4', 110, 96);
+  ctx.fillStyle = '#777'; ctx.font = '26px "Source Sans 3", sans-serif'; ctx.fillText('Tuesday 6 October 2026   10:15', 110, 138);
+  const ink = '#1C2A6E', red = '#B3261E';
+  const rows = {
+    1: ['First law of thermodynamics', 'h'], 2: ['Energy is conserved. It can only change form.'],
+    3: ['ΔU = Q − W', 'big'], 4: ['ΔU   change in internal energy', 'i'], 5: ['Q     heat added to the system', 'i'],
+    6: ['W    work done by the system', 'i'], 8: ['Sign convention (this course!):', 'red'], 9: ['Q > 0 heat in,   W > 0 work out', 'i'],
+    17: ['Example 1: gas in a piston', 'h'], 18: ['Q = 500 J added, gas does W = 200 J', 'i'], 19: ['ΔU = 500 − 200 = 300 J', 'i'],
+    21: ['Special cases', 'h'], 22: ['isochoric (V const):  W = 0  →  ΔU = Q', 'i'], 23: ['isobaric:  W = p ΔV', 'i'],
+    24: ['isothermal ideal gas:  ΔU = 0  →  Q = W', 'i'], 25: ['adiabatic:  Q = 0  →  ΔU = −W', 'i'],
+    27: ['Work in a quasi-static process:'], 28: ['W = ∫ p dV    (area under the p–V curve)', 'i'],
+    36: ['Exam tip: always draw the system boundary', 'red'], 37: ['first, then decide what crosses it.', 'red'],
+    39: ['Next lecture: second law, entropy', 'h'], 40: ['Reading: ch. 19.1 – 19.5', 'i'],
+  };
+  const base = n => RULE0 + STEP * n;
+  for (const [n, [text, kind]] of Object.entries(rows)) {
+    const x = kind === 'i' ? 190 : 120, y = base(+n);
+    ctx.fillStyle = kind === 'red' ? red : ink;
+    ctx.font = kind === 'big' ? '500 60px Caveat, cursive' : '500 48px Caveat, cursive';
+    ctx.fillText(text, kind === 'big' ? 300 : x, y);
+    if (kind === 'h') { const w = ctx.measureText(text).width; ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y + 9); ctx.quadraticCurveTo(x + w / 2, y + 14, x + w, y + 7); ctx.stroke(); }
+  }
+  // piston sketch, rows 11–15
+  ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  const t = base(10) + 30, b = base(15);
+  ctx.beginPath(); ctx.moveTo(260, t); ctx.lineTo(262, b); ctx.lineTo(560, b + 2); ctx.lineTo(558, t); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(266, t + 70); ctx.lineTo(552, t + 72); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(410, t + 70); ctx.lineTo(410, t - 10); ctx.stroke();
+  const arrow = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); const a = Math.atan2(y2 - y1, x2 - x1); ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - 18 * Math.cos(a - .5), y2 - 18 * Math.sin(a - .5)); ctx.moveTo(x2, y2); ctx.lineTo(x2 - 18 * Math.cos(a + .5), y2 - 18 * Math.sin(a + .5)); ctx.stroke(); };
+  arrow(150, b - 40, 250, b - 60); arrow(470, t + 20, 600, t - 10);
+  ctx.font = '500 44px Caveat, cursive'; ctx.fillText('Q in', 120, b - 70); ctx.fillText('W out', 615, t);
+  ctx.fillText('gas', 375, b - 60);
+  // p–V sketch, rows 30–34
+  const ox = 260, oy = base(34), top = base(29) + 20;
+  arrow(ox, oy, ox, top); arrow(ox, oy, ox + 480, oy);
+  ctx.fillText('p', ox - 40, top + 30); ctx.fillText('V', ox + 490, oy + 10);
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(ox + 70, top + 40); ctx.quadraticCurveTo(ox + 140, oy - 60, ox + 400, oy - 70); ctx.stroke();
+  ctx.lineWidth = 2; for (let x = ox + 90; x < ox + 400; x += 26) { ctx.beginPath(); ctx.moveTo(x, oy - 4); ctx.lineTo(x + 26, oy - 60 - (ox + 400 - x) * 0.25); ctx.stroke(); }
+  ctx.font = '500 44px Caveat, cursive'; ctx.fillText('area = W', ox + 520, oy - 120);
+  // slice like OneNote's export does: at a fixed height, straight through a line
+  const out = [];
+  for (let i = 0; i < 2; i++) {
+    const c = document.createElement('canvas'); c.width = W; c.height = PH;
+    c.getContext('2d').drawImage(big, 0, -i * PH);
+    out.push(analyze(c));
+  }
+  segments = out;
+  rebuild(true);
+}
+
+/* ---------- wiring ---------- */
+function seg(id, key) {
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    opts[key] = b.dataset.v;
+    for (const x of $(id).children) x.setAttribute('aria-pressed', x === b);
+    manualEnds = []; rebuild(false);
+  });
+}
+seg('paper', 'paper'); seg('orient', 'orient');
+$('size').addEventListener('input', e => { opts.size = e.target.value / 100; $('sizeOut').textContent = e.target.value + '%'; manualEnds = []; rebuild(false); });
+$('margin').addEventListener('input', e => { opts.margin = +e.target.value; $('marginOut').textContent = e.target.value + ' mm'; manualEnds = []; rebuild(false); });
+$('trim').addEventListener('change', e => { opts.trim = e.target.checked; manualEnds = []; rebuild(true); });
+$('nums').addEventListener('change', e => { opts.nums = e.target.checked; manualEnds = []; rebuild(false); });
+$('file').addEventListener('change', e => { loadFiles(e.target.files); e.target.value = ''; });
+$('save').addEventListener('click', savePdf);
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('over')));
+drop.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files); });
+document.addEventListener('paste', e => {
+  const files = [...(e.clipboardData && e.clipboardData.files || [])];
+  if (files.length) { e.preventDefault(); loadFiles(files.map((f, i) => new File([f], `pasted-${i + 1}.${(f.type.split('/')[1] || 'png')}`, { type: f.type }))); }
+});
+const tabs = [...document.querySelectorAll('[role=tab]')];
+tabs.forEach(t => t.addEventListener('click', () => {
+  tabs.forEach(o => { const on = o === t; o.setAttribute('aria-selected', on); $(o.getAttribute('aria-controls')).hidden = !on; });
+}));
+if (/Macintosh/.test(navigator.userAgent) && !('ontouchend' in document)) tabs[1].click();
+
+buildSample();
+})();
+</script>
